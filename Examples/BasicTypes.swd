@@ -1,0 +1,22 @@
+swiftDiagram 1.0
+diagram "Employee Architecture"
+
+// Protocol requirements use Swift-style accessors.
+protocol Identifiable {
+    var id: UUID { get }
+}
+
+class Person {
+    let id: UUID
+}
+
+class Employee: Person, Identifiable {
+    var role: Role
+}
+
+enum Role {
+    case engineer
+    case manager
+}
+
+Employee references Role through role label "assigned role"

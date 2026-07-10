@@ -1,0 +1,21 @@
+classDiagram
+    class Employee {
+        <<class>>
+        Role role
+    }
+    class Identifiable {
+        <<protocol>>
+        UUID id
+    }
+    class Person {
+        <<class>>
+        UUID id
+    }
+    class Role {
+        <<enum>>
+        engineer
+        manager
+    }
+    Employee ..|> Identifiable
+    Employee --|> Person
+    Employee --> Role : assigned role

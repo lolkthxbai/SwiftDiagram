@@ -1,5 +1,34 @@
 # Diagnostics
 
-Status: skeleton for Milestone 0.
+Diagnostics use one-based line and column positions and end-exclusive source ranges. The CLI format is:
 
-This document will define diagnostic formatting, stable diagnostic codes, severities, source ranges, notes, and fix-it expectations.
+```text
+Architecture.swd:12:6: error SWD1027: expected a relationship target
+```
+
+Milestone 1 emits these stable codes:
+
+| Code | Severity | Meaning |
+|---|---|---|
+| SWD1001 | error | Unterminated string literal |
+| SWD1002 | error | Unexpected character |
+| SWD1003 | error | Unterminated block comment |
+| SWD1010-SWD1027 | error | Malformed or unsupported Milestone 1 syntax |
+| SWD2001 | error | Duplicate type declaration |
+| SWD2002 | error | Duplicate member |
+| SWD2003 | error | Unknown relationship source |
+| SWD2004 | error | Unknown reference target |
+| SWD2005 | error | Missing `through` member |
+| SWD2006 | error | `through` member does not reference the relationship target |
+| SWD2007 | error | Duplicate explicit relationship |
+| SWD2008 | error | Conflicting explicit relationships |
+| SWD2010 | error | Value type cannot inherit a class |
+| SWD2011 | note | Enum raw-value entry skipped because raw values are not implemented |
+| SWD2012 | note | Class-bound protocol constraint skipped |
+| SWD2013 | error | Superclass is not the first inheritance entry |
+| SWD2014 | note | Unresolved first class entry assumed to be a superclass |
+| SWD2015 | error | Conformance target resolves to a non-protocol declaration |
+| SWD3001 | error | Renderer failure |
+| SWD5001 | error | Invalid language-version directive |
+
+The parser recovers at member and top-level boundaries so one run can report multiple independent source errors. Notes do not block rendering; errors do.

@@ -93,6 +93,7 @@ let package = Package(
                 "SwiftDiagramConfiguration",
                 "SwiftDiagramFormatter",
                 "SwiftDiagramJSON",
+                "SwiftDiagramMermaid",
                 "SwiftDiagramModel",
                 "SwiftDiagramParser",
                 "SwiftDiagramRendering",
@@ -110,6 +111,44 @@ let package = Package(
         .testTarget(
             name: "SwiftDiagramModelTests",
             dependencies: ["SwiftDiagramModel"]
+        ),
+        .testTarget(
+            name: "SwiftDiagramSyntaxParserTests",
+            dependencies: [
+                "SwiftDiagramSyntax",
+                "SwiftDiagramSyntaxParser"
+            ]
+        ),
+        .testTarget(
+            name: "SwiftDiagramParserTests",
+            dependencies: [
+                "SwiftDiagramModel",
+                "SwiftDiagramParser"
+            ]
+        ),
+        .testTarget(
+            name: "SwiftDiagramValidationTests",
+            dependencies: [
+                "SwiftDiagramModel",
+                "SwiftDiagramValidation"
+            ]
+        ),
+        .testTarget(
+            name: "SwiftDiagramMermaidTests",
+            dependencies: [
+                "SwiftDiagramCore",
+                "SwiftDiagramMermaid",
+                "SwiftDiagramParser",
+                "SwiftDiagramValidation"
+            ]
+        ),
+        .testTarget(
+            name: "EndToEndTests",
+            dependencies: ["SwiftDiagramCore"]
+        ),
+        .testTarget(
+            name: "SwiftDiagramCLITests",
+            dependencies: ["swiftdiagram"]
         )
     ],
     swiftLanguageModes: [.v6]
