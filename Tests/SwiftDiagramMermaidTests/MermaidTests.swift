@@ -36,6 +36,24 @@ final class MermaidTests: XCTestCase {
         XCTAssertTrue(first?.contains("class Alpha") == true)
     }
 
+    func testTypeReferencesFixtureMatchesGoldenOutput() throws {
+        let fixtureDirectory = repositoryRoot
+            .appendingPathComponent("Tests/Fixtures/TypeReferences", isDirectory: true)
+        let source = try String(
+            contentsOf: fixtureDirectory.appendingPathComponent("input.swd"),
+            encoding: .utf8
+        )
+        let expected = try String(
+            contentsOf: fixtureDirectory.appendingPathComponent("expected.mmd"),
+            encoding: .utf8
+        )
+
+        let result = SwiftDiagramService().render(source: source, fileName: "input.swd")
+
+        XCTAssertFalse(result.hasErrors, result.diagnostics.map(DiagnosticFormatter.format).joined(separator: "\n"))
+        XCTAssertEqual(result.output, expected)
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

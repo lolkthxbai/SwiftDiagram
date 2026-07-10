@@ -2,7 +2,7 @@
 
 SwiftDiagram is a Swift-native text language and command-line tool for architecture diagrams. Authored `.swd` files produce deterministic Mermaid class diagrams that can be reviewed alongside source code. Unlike source-to-UML converters, SwiftDiagram starts from an explicit architecture model; Swift source inspection is a separate, later workflow that will feed the same semantic model.
 
-The current development baseline implements Milestone 1: the core `.swd`-to-Mermaid vertical slice.
+The current development baseline implements Milestone 2: the complete type-reference grammar on top of the core `.swd`-to-Mermaid vertical slice.
 
 ## Installation
 
@@ -39,11 +39,13 @@ swift run swiftdiagram render Architecture.swd --output Architecture.mmd
 
 Without `--output`, `render` writes Mermaid to standard output. See [`Examples/BasicTypes.swd`](Examples/BasicTypes.swd) for declarations, enum cases, inheritance, conformance, references, comments, a title, and a language-version directive.
 
-## Milestone 1 Language
+## Current Language
 
-The current parser supports `struct`, `class`, `enum`, and `protocol` declarations; `let` and `var` properties; protocol property requirements; enum cases without associated values; `inherits`, `conforms`, and `references`; line and nested block comments; and simple named type references.
+The current parser supports `struct`, `class`, `enum`, and `protocol` declarations; `let` and `var` properties; protocol property requirements; enum cases without associated values; `inherits`, `conforms`, and `references`; and line and nested block comments.
 
-Optionals, collections, generics, methods, access control, extensions, PlantUML, configuration, formatting, JSON interchange, and Swift source inspection belong to later milestones and are not implemented yet.
+Property types support qualified names, optionals, arrays, dictionaries, generic arguments, tuples, function types including `@escaping`, `some`, `any`, and `inout`. Invalid type text is retained as unresolved syntax and reported with a source-located diagnostic.
+
+Methods, access control, extensions, PlantUML, configuration, formatting, JSON interchange, and Swift source inspection belong to later milestones and are not implemented yet.
 
 ## Development
 

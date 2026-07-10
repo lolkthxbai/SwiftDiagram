@@ -1,0 +1,24 @@
+classDiagram
+    class Error {
+        <<struct>>
+    }
+    class Service {
+        <<protocol>>
+    }
+    class TypeSamples {
+        <<struct>>
+        User? optional
+        [User] array
+        [String: [User]?] dictionary
+        Result~User, Error~ generic
+        (primary: User, Int) tuple
+        @escaping (User) -> Void callback
+        () -> (Int) -> User factory
+        any Service existential
+        some Service opaque
+        inout User input
+        Foundation.URL qualified
+    }
+    class User {
+        <<struct>>
+    }

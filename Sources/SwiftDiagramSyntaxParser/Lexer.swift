@@ -7,9 +7,9 @@ struct LexResult {
 
 struct Lexer {
     private static let keywords: Set<String> = [
-        "case", "class", "conforms", "diagram", "enum", "get", "inherits",
-        "label", "let", "protocol", "references", "set", "struct", "swiftDiagram",
-        "through", "var"
+        "any", "case", "class", "conforms", "diagram", "enum", "get", "inherits",
+        "inout", "label", "let", "protocol", "references", "set", "some", "struct",
+        "swiftDiagram", "through", "var"
     ]
 
     private let characters: [Character]

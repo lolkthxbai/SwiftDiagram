@@ -158,7 +158,7 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
         return .property(
             PropertyDeclaration(
                 name: property.name,
-                type: .named(QualifiedName(property.type.name), genericArguments: []),
+                type: lowerType(property.type),
                 mutability: property.mutability == .letProperty ? .constant : .variable,
                 accessor: property.accessor.map(PropertyAccessor.init),
                 sourceLocation: SourceRange(property.range)
@@ -171,6 +171,41 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
                 sourceLocation: SourceRange(enumCase.range)
             )
         )
+    }
+}
+
+private func lowerType(_ syntax: TypeReferenceSyntax) -> TypeReference {
+    switch syntax {
+    case .named(let name, let genericArguments, _):
+        return .named(QualifiedName(name), genericArguments: genericArguments.map(lowerType))
+    case .optional(let wrapped, _):
+        return .optional(lowerType(wrapped))
+    case .array(let element, _):
+        return .array(lowerType(element))
+    case .dictionary(let key, let value, _):
+        return .dictionary(key: lowerType(key), value: lowerType(value))
+    case .tuple(let elements, _):
+        return .tuple(
+            elements.map {
+                TupleElement(label: $0.label, type: lowerType($0.type))
+            }
+        )
+    case .function(let parameters, let returnType, let isEscaping, _):
+        return .function(
+            FunctionType(
+                parameters: parameters.map(lowerType),
+                returnType: lowerType(returnType),
+                isEscaping: isEscaping
+            )
+        )
+    case .existential(let base, _):
+        return .existential(lowerType(base))
+    case .opaque(let base, _):
+        return .opaque(lowerType(base))
+    case .inoutType(let base, _):
+        return .inoutType(lowerType(base))
+    case .unresolved(let text, _):
+        return .unresolved(text)
     }
 }
 

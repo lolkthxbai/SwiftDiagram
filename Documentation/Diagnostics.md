@@ -6,7 +6,7 @@ Diagnostics use one-based line and column positions and end-exclusive source ran
 Architecture.swd:12:6: error SWD1027: expected a relationship target
 ```
 
-Milestone 1 emits these stable codes:
+The current implementation emits these stable codes:
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -14,6 +14,7 @@ Milestone 1 emits these stable codes:
 | SWD1002 | error | Unexpected character |
 | SWD1003 | error | Unterminated block comment |
 | SWD1010-SWD1027 | error | Malformed or unsupported Milestone 1 syntax |
+| SWD1028 | error | Unparseable type reference retained as unresolved text |
 | SWD2001 | error | Duplicate type declaration |
 | SWD2002 | error | Duplicate member |
 | SWD2003 | error | Unknown relationship source |

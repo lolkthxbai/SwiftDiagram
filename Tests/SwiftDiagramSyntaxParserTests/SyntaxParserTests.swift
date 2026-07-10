@@ -73,13 +73,22 @@ final class SyntaxParserTests: XCTestCase {
         XCTAssertEqual(diagnostic?.range.start.column, 9)
     }
 
-    func testRejectsCompoundTypeReferencesInMilestoneOne() {
+    func testParsesCompoundTypeReferenceSyntax() {
         let result = DiagramSyntaxParser().parseSyntax(
-            source: "struct User { var manager: Employee? }",
+            source: "struct User { var manager: [String: Employee?] }",
             fileName: "User.swd"
         )
 
-        let diagnostic = result.diagnostics.first { $0.code == "SWD1021" }
-        XCTAssertEqual(diagnostic?.range.start.column, 36)
+        XCTAssertTrue(result.diagnostics.isEmpty)
+        guard case .declaration(let declaration) = result.sourceFile.statements.first,
+              case .property(let property) = declaration.members.first,
+              case .dictionary(let key, let value, _) = property.type,
+              case .named(let keyName, [], _) = key,
+              case .optional(let wrapped, _) = value,
+              case .named(let valueName, [], _) = wrapped else {
+            return XCTFail("Expected a dictionary with an optional value")
+        }
+        XCTAssertEqual(keyName, "String")
+        XCTAssertEqual(valueName, "Employee")
     }
 }

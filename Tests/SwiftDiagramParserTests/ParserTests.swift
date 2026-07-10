@@ -94,4 +94,125 @@ final class ParserTests: XCTestCase {
             [.resolved, .resolved, .resolved, .resolved]
         )
     }
+
+    func testLowersEveryMilestoneTwoTypeReferenceForm() throws {
+        let source = """
+        struct Types {
+            let optional: User?
+            let array: [User]
+            let dictionary: [String: [User]?]
+            let generic: Result<User, Error>
+            let tuple: (primary: User, Int)
+            let callback: @escaping (User) -> Void
+            let existential: any Service
+            let opaque: some Service
+            let input: inout User
+            let qualified: Foundation.URL
+        }
+        """
+
+        let result = SwiftDiagramParser().parse(source: source, fileName: "Types.swd")
+
+        XCTAssertFalse(result.hasErrors, result.diagnostics.map(\.message).joined(separator: "\n"))
+        let properties: [PropertyDeclaration] = try XCTUnwrap(
+            result.diagram?.declarations.first?.members.compactMap { member -> PropertyDeclaration? in
+            guard case .property(let property) = member else { return nil }
+            return property
+            }
+        )
+        XCTAssertEqual(properties[0].type, .optional(.named("User", genericArguments: [])))
+        XCTAssertEqual(properties[1].type, .array(.named("User", genericArguments: [])))
+        XCTAssertEqual(
+            properties[2].type,
+            .dictionary(
+                key: .named("String", genericArguments: []),
+                value: .optional(.array(.named("User", genericArguments: [])))
+            )
+        )
+        XCTAssertEqual(
+            properties[3].type,
+            .named(
+                "Result",
+                genericArguments: [
+                    .named("User", genericArguments: []),
+                    .named("Error", genericArguments: [])
+                ]
+            )
+        )
+        XCTAssertEqual(
+            properties[4].type,
+            .tuple([
+                TupleElement(label: "primary", type: .named("User", genericArguments: [])),
+                TupleElement(type: .named("Int", genericArguments: []))
+            ])
+        )
+        XCTAssertEqual(
+            properties[5].type,
+            .function(
+                FunctionType(
+                    parameters: [.named("User", genericArguments: [])],
+                    returnType: .named("Void", genericArguments: []),
+                    isEscaping: true
+                )
+            )
+        )
+        XCTAssertEqual(properties[6].type, .existential(.named("Service", genericArguments: [])))
+        XCTAssertEqual(properties[7].type, .opaque(.named("Service", genericArguments: [])))
+        XCTAssertEqual(properties[8].type, .inoutType(.named("User", genericArguments: [])))
+        XCTAssertEqual(properties[9].type, .named("Foundation.URL", genericArguments: []))
+    }
+
+    func testParsesFunctionReturningFunction() throws {
+        let result = SwiftDiagramParser().parse(
+            source: "struct Factory { let make: () -> (Int) -> User }",
+            fileName: nil
+        )
+
+        XCTAssertFalse(result.hasErrors)
+        let declaration = try XCTUnwrap(result.diagram?.declarations.first)
+        guard case .property(let property) = declaration.members.first,
+              case .function(let outer) = property.type,
+              case .function(let inner) = outer.returnType else {
+            return XCTFail("Expected a nested function type")
+        }
+        XCTAssertTrue(outer.parameters.isEmpty)
+        XCTAssertEqual(inner.parameters, [.named("Int", genericArguments: [])])
+        XCTAssertEqual(inner.returnType, .named("User", genericArguments: []))
+    }
+
+    func testSingleParenthesizedTypeActsAsGrouping() throws {
+        let result = SwiftDiagramParser().parse(
+            source: "struct Value { let item: (User)? }",
+            fileName: nil
+        )
+
+        let declaration = try XCTUnwrap(result.diagram?.declarations.first)
+        guard case .property(let property) = declaration.members.first else {
+            return XCTFail("Expected a property")
+        }
+        XCTAssertEqual(property.type, .optional(.named("User", genericArguments: [])))
+    }
+
+    func testMalformedTypeBecomesUnresolvedAndParsingContinues() throws {
+        let source = """
+        struct Broken {
+            let value: Result<User,>
+            let recovered: String
+        }
+        """
+
+        let result = SwiftDiagramParser().parse(source: source, fileName: "Broken.swd")
+
+        let diagnostic = try XCTUnwrap(result.diagnostics.first { $0.code.rawValue == "SWD1028" })
+        XCTAssertEqual(diagnostic.range?.start.line, 2)
+        XCTAssertEqual(diagnostic.fileName, "Broken.swd")
+        let declaration = try XCTUnwrap(result.diagram?.declarations.first)
+        guard case .property(let unresolved) = declaration.members[0],
+              case .unresolved(let text) = unresolved.type,
+              case .property(let recovered) = declaration.members[1] else {
+            return XCTFail("Expected unresolved and recovered properties")
+        }
+        XCTAssertEqual(text, "Result<User,>")
+        XCTAssertEqual(recovered.type, .named("String", genericArguments: []))
+    }
 }

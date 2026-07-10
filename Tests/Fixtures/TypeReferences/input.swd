@@ -1,0 +1,20 @@
+swiftDiagram 1.0
+diagram "Type References"
+
+protocol Service {}
+struct User {}
+struct Error {}
+
+struct TypeSamples {
+    let optional: User?
+    let array: [User]
+    let dictionary: [String: [User]?]
+    let generic: Result<User, Error>
+    let tuple: (primary: User, Int)
+    let callback: @escaping (User) -> Void
+    let factory: () -> (Int) -> User
+    let existential: any Service
+    let opaque: some Service
+    let input: inout User
+    let qualified: Foundation.URL
+}

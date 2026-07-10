@@ -106,6 +106,52 @@ public struct NamedTypeSyntax: SyntaxNode {
     }
 }
 
+public indirect enum TypeReferenceSyntax: SyntaxNode {
+    case named(name: String, genericArguments: [TypeReferenceSyntax], range: SyntaxRange)
+    case optional(TypeReferenceSyntax, range: SyntaxRange)
+    case array(TypeReferenceSyntax, range: SyntaxRange)
+    case dictionary(key: TypeReferenceSyntax, value: TypeReferenceSyntax, range: SyntaxRange)
+    case tuple([TupleTypeElementSyntax], range: SyntaxRange)
+    case function(
+        parameters: [TypeReferenceSyntax],
+        returnType: TypeReferenceSyntax,
+        isEscaping: Bool,
+        range: SyntaxRange
+    )
+    case existential(TypeReferenceSyntax, range: SyntaxRange)
+    case opaque(TypeReferenceSyntax, range: SyntaxRange)
+    case inoutType(TypeReferenceSyntax, range: SyntaxRange)
+    case unresolved(String, range: SyntaxRange)
+
+    public var range: SyntaxRange {
+        switch self {
+        case .named(_, _, let range),
+             .optional(_, let range),
+             .array(_, let range),
+             .dictionary(_, _, let range),
+             .tuple(_, let range),
+             .function(_, _, _, let range),
+             .existential(_, let range),
+             .opaque(_, let range),
+             .inoutType(_, let range),
+             .unresolved(_, let range):
+            range
+        }
+    }
+}
+
+public struct TupleTypeElementSyntax: SyntaxNode {
+    public var label: String?
+    public var type: TypeReferenceSyntax
+    public var range: SyntaxRange
+
+    public init(label: String? = nil, type: TypeReferenceSyntax, range: SyntaxRange) {
+        self.label = label
+        self.type = type
+        self.range = range
+    }
+}
+
 public struct VersionDirectiveSyntax: SyntaxNode {
     public var version: String
     public var range: SyntaxRange
@@ -168,14 +214,14 @@ public enum PropertyAccessorSyntax: Equatable, Sendable {
 public struct PropertyDeclarationSyntax: SyntaxNode {
     public var mutability: PropertyMutabilitySyntax
     public var name: String
-    public var type: NamedTypeSyntax
+    public var type: TypeReferenceSyntax
     public var accessor: PropertyAccessorSyntax?
     public var range: SyntaxRange
 
     public init(
         mutability: PropertyMutabilitySyntax,
         name: String,
-        type: NamedTypeSyntax,
+        type: TypeReferenceSyntax,
         accessor: PropertyAccessorSyntax? = nil,
         range: SyntaxRange
     ) {

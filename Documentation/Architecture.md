@@ -13,9 +13,9 @@ SwiftDiagram uses one directional pipeline:
     -> SwiftDiagramMermaid
 ```
 
-`SwiftDiagramSyntaxParser` owns the handwritten lexer and recursive-descent parser. Its positioned tokens retain comments and whitespace as trivia, and its syntax diagnostics do not depend on the semantic model.
+`SwiftDiagramSyntaxParser` owns the handwritten lexer and recursive-descent parser. Its positioned tokens retain comments and whitespace as trivia, and its syntax diagnostics do not depend on the semantic model. Type references are parsed recursively so nested collections, generics, tuples, and function returns retain their structure before lowering.
 
-`SwiftDiagramParser` lowers syntax nodes into `SwiftDiagramModel`. It builds a local symbol table after collecting all declarations, resolves inheritance and conformance clauses, and lets explicit relationship statements override clause classification.
+`SwiftDiagramParser` lowers syntax nodes into `SwiftDiagramModel`, including every structured `TypeReference` case used by Milestone 2. It builds a local symbol table after collecting all declarations, resolves inheritance and conformance clauses, and lets explicit relationship statements override clause classification.
 
 `SwiftDiagramValidation` checks the resulting semantic model. Renderers depend only on `SwiftDiagramModel` and the renderer-neutral contract in `SwiftDiagramRendering`; they never consume parser syntax directly. `SwiftDiagramCore` coordinates the pipeline, and the CLI handles only file I/O, options, diagnostics, and exit status.
 

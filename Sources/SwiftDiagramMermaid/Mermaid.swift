@@ -146,10 +146,29 @@ private func renderType(_ type: TypeReference) -> String {
         return "[\(renderType(element))]"
     case .dictionary(let key, let value):
         return "[\(renderType(key)): \(renderType(value))]"
+    case .tuple(let elements):
+        let contents = elements.map { element in
+            if let label = element.label {
+                return "\(mermaidText(label)): \(renderType(element.type))"
+            }
+            return renderType(element.type)
+        }
+        return "(\(contents.joined(separator: ", ")))"
+    case .function(let function):
+        let prefix = function.isEscaping ? "@escaping " : ""
+        let parameters = function.parameters.map(renderType).joined(separator: ", ")
+        return "\(prefix)(\(parameters)) -> \(renderType(function.returnType))"
+    case .existential(let base):
+        return "any \(renderType(base))"
+    case .opaque(let base):
+        return "some \(renderType(base))"
+    case .attributed(let attributes, let base):
+        let prefix = attributes.map { "@\(mermaidText($0.name))" }.joined(separator: " ")
+        return prefix.isEmpty ? renderType(base) : "\(prefix) \(renderType(base))"
+    case .inoutType(let base):
+        return "inout \(renderType(base))"
     case .unresolved(let text):
         return mermaidText(text)
-    default:
-        return "unsupported"
     }
 }
 
