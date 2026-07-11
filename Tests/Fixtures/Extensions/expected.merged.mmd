@@ -1,0 +1,22 @@
+classDiagram
+    class Codable {
+        <<protocol>>
+    }
+    class Profile {
+        <<struct>>
+    }
+    class Team {
+        <<struct>>
+        [User] users
+    }
+    class User {
+        <<struct>>
+        Profile profile
+        make() User$
+        mutating rename(to name: String)
+        String displayName
+        preview() User$
+    }
+    Team o-- User : users
+    User ..|> Codable
+    User *-- Profile : profile

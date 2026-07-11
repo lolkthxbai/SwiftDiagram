@@ -2,7 +2,7 @@
 
 SwiftDiagram has separate package and language versions.
 
-The Milestone 3 package release target is `0.3.0`. Milestone 0 remains an untagged development baseline; Milestones 1 and 2 are tagged `0.1.0` and `0.2.0`. Package versions follow semantic versioning as later milestones add behavior and eventually stabilize the public API.
+The Milestone 4 package release target is `0.4.0`. Milestone 0 remains an untagged development baseline; Milestones 1 through 3 are tagged `0.1.0`, `0.2.0`, and `0.3.0`. Package versions follow semantic versioning as later milestones add behavior and eventually stabilize the public API.
 
 `.swd` files may declare their language version independently:
 

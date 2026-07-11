@@ -11,10 +11,12 @@ public struct MermaidRenderer: DiagramRenderer, Sendable {
         _ diagram: Diagram,
         options: RenderOptions = RenderOptions()
     ) throws -> String {
-        let declarations = filteredDeclarations(diagram.declarations, options: options)
-        let relationships = filteredRelationships(diagram.relationships, options: options)
+        let presentation = extensionPresentation(diagram, options: options)
+        let declarations = filteredDeclarations(presentation.declarations, options: options)
+        let relationships = filteredRelationships(diagram.relationships + presentation.relationships, options: options)
         let names = MermaidNameTable(
-            names: declarations.map(\.name) + relationships.flatMap { [$0.source, $0.target] }
+            names: declarations.map(\.name) + relationships.flatMap { [$0.source, $0.target] } +
+                presentation.separate.flatMap { [$0.alias, $0.target] + $0.conformances }
         )
         var lines = ["classDiagram"]
 
@@ -25,12 +27,67 @@ public struct MermaidRenderer: DiagramRenderer, Sendable {
         for declaration in declarations {
             lines.append(contentsOf: renderDeclaration(declaration, names: names, options: options))
         }
+        for declaration in presentation.separate {
+            lines.append(contentsOf: renderExtension(declaration, names: names, options: options))
+        }
         for relationship in relationships {
             lines.append(renderRelationship(relationship, names: names))
         }
 
         return lines.joined(separator: "\n") + "\n"
     }
+}
+
+private struct MermaidExtensionPresentation {
+    var declarations: [TypeDeclaration]
+    var relationships: [Relationship]
+    var separate: [PresentedExtension]
+}
+
+private struct PresentedExtension {
+    var alias: QualifiedName
+    var target: QualifiedName
+    var displayType: TypeReference
+    var conformances: [QualifiedName]
+    var members: [Member]
+}
+
+private func extensionPresentation(_ diagram: Diagram, options: RenderOptions) -> MermaidExtensionPresentation {
+    guard options.extensionDisplayMode != .hidden else {
+        return MermaidExtensionPresentation(declarations: diagram.declarations, relationships: [], separate: [])
+    }
+    var declarations = diagram.declarations
+    var relationships: [Relationship] = []
+    var separate: [PresentedExtension] = []
+
+    for (index, declaration) in diagram.extensions.enumerated() {
+        guard case .named(let target, _) = declaration.extendedType,
+              !options.excludedElements.contains(target.description) else { continue }
+        let conformances = declaration.conformances.compactMap(namedType)
+        if options.extensionDisplayMode == .merged,
+           let declarationIndex = declarations.firstIndex(where: { $0.name == target }) {
+            declarations[declarationIndex].members.append(contentsOf: declaration.members)
+            relationships.append(contentsOf: conformances.map {
+                Relationship(source: target, target: $0, kind: .conforms, origin: .explicit)
+            })
+        } else {
+            separate.append(
+                PresentedExtension(
+                    alias: QualifiedName("__extension_\(index)_\(target.description)"),
+                    target: target,
+                    displayType: declaration.extendedType,
+                    conformances: conformances,
+                    members: declaration.members
+                )
+            )
+        }
+    }
+    return MermaidExtensionPresentation(declarations: declarations, relationships: relationships, separate: separate)
+}
+
+private func namedType(_ type: TypeReference) -> QualifiedName? {
+    guard case .named(let name, _) = type else { return nil }
+    return name
 }
 
 private func filteredDeclarations(
@@ -102,6 +159,37 @@ private func renderDeclaration(
     return lines
 }
 
+private func renderExtension(
+    _ declaration: PresentedExtension,
+    names: MermaidNameTable,
+    options: RenderOptions
+) -> [String] {
+    var lines = ["    class \(names[declaration.alias])[\"extension \(mermaidText(renderType(declaration.displayType)))\"] {"]
+    lines.append("        <<extension>>")
+    for member in declaration.members where shouldRender(member, options: options) {
+        switch member {
+        case .property(let property):
+            lines.append("        \(accessSymbol(property.accessLevel))\(renderType(property.type)) \(mermaidText(property.name))")
+        case .enumCase(let enumCase):
+            lines.append("        \(renderEnumCase(enumCase))")
+        case .method(let method) where options.includeMethods:
+            lines.append("        \(renderMethod(method))")
+        case .initializer(let initializer) where options.includeMethods:
+            lines.append("        \(renderInitializer(initializer))")
+        case .typeAlias(let typeAlias):
+            lines.append("        \(renderType(typeAlias.assignedType)) \(mermaidText(typeAlias.name))")
+        default:
+            break
+        }
+    }
+    lines.append("    }")
+    lines.append("    \(names[declaration.alias]) ..> \(names[declaration.target]) : extends")
+    for conformance in declaration.conformances {
+        lines.append("    \(names[declaration.alias]) ..|> \(names[conformance])")
+    }
+    return lines
+}
+
 private func shouldRender(_ member: Member, options: RenderOptions) -> Bool {
     let accessLevel: AccessLevel?
     switch member {
@@ -153,7 +241,8 @@ private func renderEnumCase(_ enumCase: EnumCaseDeclaration) -> String {
 }
 
 private func renderMethod(_ method: MethodDeclaration) -> String {
-    var result = "\(accessSymbol(method.accessLevel))\(mermaidText(method.name))"
+    var result = method.isMutating ? "mutating " : ""
+    result += "\(accessSymbol(method.accessLevel))\(mermaidText(method.name))"
     result += "(\(method.parameters.map(renderParameter).joined(separator: ", ")))"
     if method.isAsync {
         result += " async"

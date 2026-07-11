@@ -1,8 +1,10 @@
+import SwiftDiagramFormatter
 import SwiftDiagramMermaid
 import SwiftDiagramModel
 import SwiftDiagramParser
 import SwiftDiagramPlantUML
 import SwiftDiagramRendering
+import SwiftDiagramSyntax
 import SwiftDiagramValidation
 
 public enum OutputFormat: String, Equatable, Sendable, Codable {
@@ -38,17 +40,35 @@ public struct RenderingResult: Equatable, Sendable {
     }
 }
 
+public struct SourceFormattingResult: Equatable, Sendable {
+    public var output: String
+    public var changed: Bool
+    public var diagnostics: [Diagnostic]
+
+    public init(output: String, changed: Bool, diagnostics: [Diagnostic]) {
+        self.output = output
+        self.changed = changed
+        self.diagnostics = diagnostics
+    }
+
+    public var hasErrors: Bool {
+        diagnostics.contains { $0.severity == .error }
+    }
+}
+
 public struct SwiftDiagramService: Sendable {
     private let parser: SwiftDiagramParser
     private let validator: SwiftDiagramValidator
     private let mermaidRenderer: MermaidRenderer
     private let plantUMLRenderer: PlantUMLRenderer
+    private let formatter: SwiftDiagramFormatter
 
     public init() {
         parser = SwiftDiagramParser()
         validator = SwiftDiagramValidator()
         mermaidRenderer = MermaidRenderer()
         plantUMLRenderer = PlantUMLRenderer()
+        formatter = SwiftDiagramFormatter()
     }
 
     public func parseAndValidate(
@@ -98,6 +118,15 @@ public struct SwiftDiagramService: Sendable {
             return RenderingResult(output: nil, diagnostics: diagnostics)
         }
     }
+
+    public func format(source: String, fileName: String? = nil) -> SourceFormattingResult {
+        let result = formatter.format(source: source, fileName: fileName)
+        return SourceFormattingResult(
+            output: result.text,
+            changed: result.changed,
+            diagnostics: result.diagnostics.map(Diagnostic.init)
+        )
+    }
 }
 
 public enum DiagnosticFormatter {
@@ -125,5 +154,28 @@ private func sortedDiagnostics(_ diagnostics: [Diagnostic]) -> [Diagnostic] {
             return lhsOffset < rhsOffset
         }
         return $0.code.rawValue < $1.code.rawValue
+    }
+}
+
+private extension Diagnostic {
+    init(_ syntax: SyntaxDiagnostic) {
+        self.init(
+            severity: DiagnosticSeverity(rawValue: syntax.severity.rawValue) ?? .error,
+            code: DiagnosticCode(rawValue: syntax.code),
+            message: syntax.message,
+            fileName: syntax.fileName,
+            range: SourceRange(
+                start: SourcePosition(
+                    line: syntax.range.start.line,
+                    column: syntax.range.start.column,
+                    offset: syntax.range.start.offset
+                ),
+                end: SourcePosition(
+                    line: syntax.range.end.line,
+                    column: syntax.range.end.column,
+                    offset: syntax.range.end.offset
+                )
+            )
+        )
     }
 }

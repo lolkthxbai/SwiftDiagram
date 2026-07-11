@@ -1,3 +1,4 @@
+import Foundation
 import SwiftDiagramSyntax
 
 public struct SyntaxParseResult: Equatable, Sendable {
@@ -59,8 +60,12 @@ private struct Parser {
         while !isAtEnd {
             let startingIndex = index
             if let prefix = declarationPrefix() {
-                if let declaration = parseDeclaration(prefix: prefix) {
+                if let declaration = parseDeclaration(prefix: prefix, start: current.range.start) {
                     statements.append(.declaration(declaration))
+                }
+            } else if isKeyword("extension") {
+                if let declaration = parseExtension(start: current.range.start) {
+                    statements.append(.extension(declaration))
                 }
             } else if current.kind == .identifier {
                 if let relationship = parseRelationship() {
@@ -116,8 +121,10 @@ private struct Parser {
         )
     }
 
-    private mutating func parseDeclaration(prefix: DeclarationPrefix) -> TypeDeclarationSyntax? {
-        let start = current.range.start
+    private mutating func parseDeclaration(
+        prefix: DeclarationPrefix,
+        start: SyntaxPosition
+    ) -> TypeDeclarationSyntax? {
         if prefix.accessLevel != nil {
             advance()
         }
@@ -146,44 +153,7 @@ private struct Parser {
             return nil
         }
 
-        var members: [MemberSyntax] = []
-        while !isAtEnd && !isPunctuation("}") {
-            let startingIndex = index
-            let memberStart = current.range.start
-            let accessLevel = consumeAccessLevel()
-            if isKeyword("let") || isKeyword("var") {
-                if let property = parseProperty(accessLevel: accessLevel, start: memberStart) {
-                    members.append(.property(property))
-                }
-            } else if isKeyword("func") {
-                if let method = parseMethod(accessLevel: accessLevel, start: memberStart) {
-                    members.append(.method(method))
-                }
-            } else if isKeyword("init") {
-                if let initializer = parseInitializer(accessLevel: accessLevel, start: memberStart) {
-                    members.append(.initializer(initializer))
-                }
-            } else if isKeyword("case") {
-                if accessLevel != nil {
-                    diagnose(
-                        code: "SWD1029",
-                        message: "enum cases cannot have access modifiers",
-                        at: SyntaxRange(start: memberStart, end: current.range.start)
-                    )
-                }
-                if kind != .enum {
-                    diagnose(code: "SWD1014", message: "enum cases are only valid inside enum declarations", at: current.range)
-                }
-                members.append(contentsOf: parseEnumCases().map(MemberSyntax.enumCase))
-            } else {
-                diagnose(code: "SWD1015", message: "expected a property, method, initializer, or enum case", at: current.range)
-                recoverMember()
-            }
-
-            if index == startingIndex {
-                advance()
-            }
-        }
+        let members = parseMembers(declarationKind: kind)
 
         let end: SyntaxPosition
         if let closeBrace = consumePunctuation("}") {
@@ -203,8 +173,177 @@ private struct Parser {
         )
     }
 
+    private mutating func parseExtension(start: SyntaxPosition) -> ExtensionDeclarationSyntax? {
+        advance()
+        let extendedType: TypeReferenceSyntax
+        do {
+            extendedType = try parseTypeReference()
+        } catch let failure as TypeParseFailure {
+            diagnose(code: "SWD1040", message: failure.message, at: failure.range)
+            recoverTopLevel()
+            return nil
+        } catch {
+            diagnose(code: "SWD1040", message: "invalid extension target", at: current.range)
+            recoverTopLevel()
+            return nil
+        }
+
+        var conformances: [TypeReferenceSyntax] = []
+        if consumePunctuation(":") != nil {
+            do {
+                conformances.append(try parseTypeReference())
+                while consumePunctuation(",") != nil {
+                    conformances.append(try parseTypeReference())
+                }
+            } catch let failure as TypeParseFailure {
+                diagnose(code: "SWD1042", message: failure.message, at: failure.range)
+                recoverTopLevel()
+                return nil
+            } catch {
+                diagnose(code: "SWD1042", message: "invalid extension conformance", at: current.range)
+                recoverTopLevel()
+                return nil
+            }
+        }
+
+        guard consumePunctuation("{") != nil else {
+            diagnose(code: "SWD1043", message: "expected '{' to begin extension declaration", at: current.range)
+            recoverTopLevel()
+            return nil
+        }
+        let members = parseMembers(declarationKind: nil)
+        let end: SyntaxPosition
+        if let closeBrace = consumePunctuation("}") {
+            end = closeBrace.range.end
+        } else {
+            diagnose(code: "SWD1044", message: "expected '}' to end extension declaration", at: current.range)
+            end = current.range.end
+        }
+        return ExtensionDeclarationSyntax(
+            extendedType: extendedType,
+            conformances: conformances,
+            members: members,
+            range: SyntaxRange(start: start, end: end)
+        )
+    }
+
+    private mutating func parseMembers(declarationKind: DeclarationKindSyntax?) -> [MemberSyntax] {
+        var members: [MemberSyntax] = []
+        while !isAtEnd && !isPunctuation("}") {
+            let startingIndex = index
+            let memberStart = current.range.start
+            let attributes = parseAttributes()
+            let accessLevel = consumeAccessLevel()
+            var isStatic = false
+            var isMutating = false
+            while isKeyword("static") || isKeyword("mutating") {
+                let modifier = advance()
+                if modifier.text == "static" {
+                    if isStatic {
+                        diagnose(code: "SWD1045", message: "duplicate 'static' modifier", at: modifier.range)
+                    }
+                    isStatic = true
+                } else {
+                    if isMutating {
+                        diagnose(code: "SWD1045", message: "duplicate 'mutating' modifier", at: modifier.range)
+                    }
+                    isMutating = true
+                }
+            }
+
+            if isKeyword("let") || isKeyword("var") {
+                if isStatic || isMutating {
+                    diagnose(code: "SWD1046", message: "method modifiers require a method declaration", at: current.range)
+                }
+                if let property = parseProperty(accessLevel: accessLevel, attributes: attributes, start: memberStart) {
+                    members.append(.property(property))
+                }
+            } else if isKeyword("func") {
+                if let method = parseMethod(
+                    accessLevel: accessLevel,
+                    attributes: attributes,
+                    isStatic: isStatic,
+                    isMutating: isMutating,
+                    start: memberStart
+                ) {
+                    members.append(.method(method))
+                }
+            } else if isKeyword("init") {
+                if isStatic || isMutating {
+                    diagnose(code: "SWD1046", message: "method modifiers require a method declaration", at: current.range)
+                }
+                if let initializer = parseInitializer(accessLevel: accessLevel, attributes: attributes, start: memberStart) {
+                    members.append(.initializer(initializer))
+                }
+            } else if isKeyword("case") {
+                if !attributes.isEmpty || accessLevel != nil || isStatic || isMutating {
+                    diagnose(code: "SWD1029", message: "enum cases cannot have attributes or modifiers", at: current.range)
+                }
+                if declarationKind != .enum {
+                    diagnose(code: "SWD1014", message: "enum cases are only valid inside enum declarations", at: current.range)
+                }
+                members.append(contentsOf: parseEnumCases().map(MemberSyntax.enumCase))
+            } else {
+                diagnose(code: "SWD1015", message: "expected a property, method, initializer, or enum case", at: current.range)
+                recoverMember()
+            }
+
+            if index == startingIndex {
+                advance()
+            }
+        }
+        return members
+    }
+
+    private mutating func parseAttributes() -> [AttributeSyntax] {
+        var attributes: [AttributeSyntax] = []
+        while let atSign = consumePunctuation("@") {
+            guard current.kind == .identifier else {
+                diagnose(code: "SWD1047", message: "expected an attribute name after '@'", at: current.range)
+                return attributes
+            }
+            let name = advance()
+            var argumentText: String?
+            var end = name.range.end
+            if let open = consumePunctuation("(") {
+                let argumentStart = open.range.end.offset
+                var depth = 1
+                var close: Token?
+                while !isAtEnd && depth > 0 {
+                    if isPunctuation("(") {
+                        depth += 1
+                    } else if isPunctuation(")") {
+                        depth -= 1
+                        if depth == 0 {
+                            close = advance()
+                            break
+                        }
+                    }
+                    advance()
+                }
+                guard let close else {
+                    diagnose(code: "SWD1048", message: "expected ')' to end attribute arguments", at: current.range)
+                    return attributes
+                }
+                let lower = min(argumentStart, sourceCharacters.count)
+                let upper = min(max(close.range.start.offset, lower), sourceCharacters.count)
+                argumentText = String(sourceCharacters[lower..<upper]).trimmingCharacters(in: .whitespacesAndNewlines)
+                end = close.range.end
+            }
+            attributes.append(
+                AttributeSyntax(
+                    name: name.text,
+                    argumentText: argumentText,
+                    range: SyntaxRange(start: atSign.range.start, end: end)
+                )
+            )
+        }
+        return attributes
+    }
+
     private mutating func parseProperty(
         accessLevel: AccessLevelSyntax?,
+        attributes: [AttributeSyntax],
         start: SyntaxPosition
     ) -> PropertyDeclarationSyntax? {
         let mutabilityToken = advance()
@@ -253,6 +392,7 @@ private struct Parser {
                     name: name.text,
                     type: type,
                     accessLevel: accessLevel,
+                    attributes: attributes,
                     range: SyntaxRange(start: start, end: openBrace.range.end)
                 )
             }
@@ -276,6 +416,7 @@ private struct Parser {
             name: name.text,
             type: type,
             accessLevel: accessLevel,
+            attributes: attributes,
             accessor: accessor,
             range: SyntaxRange(start: start, end: end)
         )
@@ -283,6 +424,9 @@ private struct Parser {
 
     private mutating func parseMethod(
         accessLevel: AccessLevelSyntax?,
+        attributes: [AttributeSyntax],
+        isStatic: Bool,
+        isMutating: Bool,
         start: SyntaxPosition
     ) -> MethodDeclarationSyntax? {
         advance()
@@ -309,6 +453,9 @@ private struct Parser {
                 parameters: clause.parameters,
                 returnType: returnType,
                 accessLevel: accessLevel,
+                attributes: attributes,
+                isStatic: isStatic,
+                isMutating: isMutating,
                 isAsync: effects.isAsync,
                 throwsKind: effects.throwsKind,
                 range: SyntaxRange(start: start, end: end)
@@ -326,6 +473,7 @@ private struct Parser {
 
     private mutating func parseInitializer(
         accessLevel: AccessLevelSyntax?,
+        attributes: [AttributeSyntax],
         start: SyntaxPosition
     ) -> InitializerDeclarationSyntax? {
         advance()
@@ -344,6 +492,7 @@ private struct Parser {
             return InitializerDeclarationSyntax(
                 parameters: clause.parameters,
                 accessLevel: accessLevel,
+                attributes: attributes,
                 failableKind: failableKind,
                 isAsync: effects.isAsync,
                 throwsKind: effects.throwsKind,
@@ -785,7 +934,8 @@ private struct Parser {
     private mutating func recoverTopLevel() {
         let line = current.range.start.line
         while !isAtEnd {
-            if current.range.start.line > line && (declarationPrefix() != nil || current.kind == .identifier) {
+            if current.range.start.line > line &&
+                (declarationPrefix() != nil || isKeyword("extension") || current.kind == .identifier) {
                 return
             }
             advance()
@@ -816,7 +966,8 @@ private struct Parser {
     }
 
     private var isMemberStart: Bool {
-        AccessLevelSyntax(rawValue: current.text) != nil ||
+        isPunctuation("@") || AccessLevelSyntax(rawValue: current.text) != nil ||
+            isKeyword("static") || isKeyword("mutating") ||
             isKeyword("let") || isKeyword("var") || isKeyword("func") ||
             isKeyword("init") || isKeyword("case")
     }

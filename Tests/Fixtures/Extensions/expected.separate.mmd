@@ -1,0 +1,26 @@
+classDiagram
+    class Codable {
+        <<protocol>>
+    }
+    class Profile {
+        <<struct>>
+    }
+    class Team {
+        <<struct>>
+        [User] users
+    }
+    class User {
+        <<struct>>
+        Profile profile
+        make() User$
+        mutating rename(to name: String)
+    }
+    class __extension_0_User["extension User"] {
+        <<extension>>
+        String displayName
+        preview() User$
+    }
+    __extension_0_User ..> User : extends
+    __extension_0_User ..|> Codable
+    Team o-- User : users
+    User *-- Profile : profile

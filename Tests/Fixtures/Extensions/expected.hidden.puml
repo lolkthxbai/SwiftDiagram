@@ -1,0 +1,17 @@
+@startuml
+hide empty members
+interface "Codable" as Codable <<protocol>> {
+}
+class "Profile" as Profile <<struct>> {
+}
+class "Team" as Team <<struct>> {
+    users : [User]
+}
+class "User" as User <<struct>> {
+    profile : Profile
+    {static} make() : User
+    mutating rename(to name: String)
+}
+Team o-- User : users
+User *-- Profile : profile
+@enduml

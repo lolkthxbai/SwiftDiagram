@@ -109,4 +109,45 @@ final class SyntaxParserTests: XCTestCase {
         }
         XCTAssertEqual(property.name, "recovered")
     }
+
+    func testParsesMilestoneFourExtensionsAttributesAndMethodModifiers() {
+        let source = """
+        struct User {
+            @MainActor
+            var name: String { get set }
+            @Factory("preview")
+            static func make() -> User
+            mutating func rename(to name: String)
+        }
+        extension User: Codable {
+            var displayName: String { get }
+        }
+        User owns Profile through profile
+        Team contains User through users
+        User extends Profile
+        """
+
+        let result = DiagramSyntaxParser().parseSyntax(source: source, fileName: "Milestone4.swd")
+
+        XCTAssertTrue(result.diagnostics.isEmpty, result.diagnostics.map(\.message).joined(separator: "\n"))
+        guard case .declaration(let user) = result.sourceFile.statements[0],
+              case .property(let property) = user.members[0],
+              case .method(let factory) = user.members[1],
+              case .method(let rename) = user.members[2],
+              case .extension(let userExtension) = result.sourceFile.statements[1],
+              case .relationship(let owns) = result.sourceFile.statements[2],
+              case .relationship(let contains) = result.sourceFile.statements[3],
+              case .relationship(let extends) = result.sourceFile.statements[4] else {
+            return XCTFail("Expected Milestone 4 syntax nodes")
+        }
+        XCTAssertEqual(property.attributes.map(\.name), ["MainActor"])
+        XCTAssertEqual(property.accessor, .getSet)
+        XCTAssertEqual(factory.attributes.first?.argumentText, "\"preview\"")
+        XCTAssertTrue(factory.isStatic)
+        XCTAssertTrue(rename.isMutating)
+        XCTAssertEqual(userExtension.members.count, 1)
+        XCTAssertEqual(owns.kind, .owns)
+        XCTAssertEqual(contains.kind, .contains)
+        XCTAssertEqual(extends.kind, .extends)
+    }
 }

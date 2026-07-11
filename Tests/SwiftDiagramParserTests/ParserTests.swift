@@ -267,4 +267,41 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(loaded.associatedValues.first?.type, .array(.named("User", genericArguments: [])))
         XCTAssertEqual(result.diagram?.relationships.map(\.kind), [.accepts, .returns])
     }
+
+    func testLowersMilestoneFourExtensionsAttributesAndModifiers() throws {
+        let source = """
+        protocol Codable {}
+        struct User {
+            @MainActor
+            var name: String { get set }
+            static func make() -> User
+            mutating func rename(to name: String)
+        }
+        extension User: Codable {
+            var displayName: String { get }
+        }
+        User owns User through name
+        User extends Codable
+        """
+
+        let result = SwiftDiagramParser().parse(source: source, fileName: "Milestone4.swd")
+
+        XCTAssertFalse(result.hasErrors, result.diagnostics.map(\.message).joined(separator: "\n"))
+        let user = try XCTUnwrap(result.diagram?.declarations[1])
+        guard case .property(let property) = user.members[0],
+              case .method(let factory) = user.members[1],
+              case .method(let rename) = user.members[2] else {
+            return XCTFail("Expected lowered Milestone 4 members")
+        }
+        XCTAssertEqual(property.attributes, [Attribute(name: "MainActor")])
+        XCTAssertEqual(property.isolation, .globalActor("MainActor"))
+        XCTAssertTrue(factory.isStatic)
+        XCTAssertTrue(rename.isMutating)
+        let userExtension = try XCTUnwrap(result.diagram?.extensions.first)
+        XCTAssertEqual(userExtension.extendedType, .named("User", genericArguments: []))
+        XCTAssertEqual(userExtension.conformances, [.named("Codable", genericArguments: [])])
+        XCTAssertEqual(userExtension.members.count, 1)
+        XCTAssertEqual(result.diagram?.relationships.first?.kind, .owns)
+        XCTAssertEqual(result.diagram?.relationships.last?.kind, .extends)
+    }
 }

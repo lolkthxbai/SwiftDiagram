@@ -1,0 +1,24 @@
+protocol Codable {
+}
+
+struct Profile {
+}
+
+struct Team {
+    var users: [User]
+}
+
+struct User {
+    var profile: Profile
+    static func make() -> User
+    mutating func rename(to name: String)
+}
+
+extension User: Codable {
+    @MainActor
+    var displayName: String { get }
+    static func preview() -> User
+}
+
+Team contains User through users
+User owns Profile through profile

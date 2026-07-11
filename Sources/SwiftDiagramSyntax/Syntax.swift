@@ -188,6 +188,18 @@ public enum AccessLevelSyntax: String, Equatable, Sendable {
     case open
 }
 
+public struct AttributeSyntax: SyntaxNode {
+    public var name: String
+    public var argumentText: String?
+    public var range: SyntaxRange
+
+    public init(name: String, argumentText: String? = nil, range: SyntaxRange) {
+        self.name = name
+        self.argumentText = argumentText
+        self.range = range
+    }
+}
+
 public struct TypeDeclarationSyntax: SyntaxNode {
     public var kind: DeclarationKindSyntax
     public var name: NamedTypeSyntax
@@ -228,6 +240,7 @@ public struct PropertyDeclarationSyntax: SyntaxNode {
     public var name: String
     public var type: TypeReferenceSyntax
     public var accessLevel: AccessLevelSyntax?
+    public var attributes: [AttributeSyntax]
     public var accessor: PropertyAccessorSyntax?
     public var range: SyntaxRange
 
@@ -236,6 +249,7 @@ public struct PropertyDeclarationSyntax: SyntaxNode {
         name: String,
         type: TypeReferenceSyntax,
         accessLevel: AccessLevelSyntax? = nil,
+        attributes: [AttributeSyntax] = [],
         accessor: PropertyAccessorSyntax? = nil,
         range: SyntaxRange
     ) {
@@ -243,6 +257,7 @@ public struct PropertyDeclarationSyntax: SyntaxNode {
         self.name = name
         self.type = type
         self.accessLevel = accessLevel
+        self.attributes = attributes
         self.accessor = accessor
         self.range = range
     }
@@ -278,6 +293,9 @@ public struct MethodDeclarationSyntax: SyntaxNode {
     public var parameters: [ParameterSyntax]
     public var returnType: TypeReferenceSyntax?
     public var accessLevel: AccessLevelSyntax?
+    public var attributes: [AttributeSyntax]
+    public var isStatic: Bool
+    public var isMutating: Bool
     public var isAsync: Bool
     public var throwsKind: ThrowsKindSyntax
     public var range: SyntaxRange
@@ -287,6 +305,9 @@ public struct MethodDeclarationSyntax: SyntaxNode {
         parameters: [ParameterSyntax] = [],
         returnType: TypeReferenceSyntax? = nil,
         accessLevel: AccessLevelSyntax? = nil,
+        attributes: [AttributeSyntax] = [],
+        isStatic: Bool = false,
+        isMutating: Bool = false,
         isAsync: Bool = false,
         throwsKind: ThrowsKindSyntax = .none,
         range: SyntaxRange
@@ -295,6 +316,9 @@ public struct MethodDeclarationSyntax: SyntaxNode {
         self.parameters = parameters
         self.returnType = returnType
         self.accessLevel = accessLevel
+        self.attributes = attributes
+        self.isStatic = isStatic
+        self.isMutating = isMutating
         self.isAsync = isAsync
         self.throwsKind = throwsKind
         self.range = range
@@ -310,6 +334,7 @@ public enum InitializerFailabilitySyntax: Equatable, Sendable {
 public struct InitializerDeclarationSyntax: SyntaxNode {
     public var parameters: [ParameterSyntax]
     public var accessLevel: AccessLevelSyntax?
+    public var attributes: [AttributeSyntax]
     public var failableKind: InitializerFailabilitySyntax
     public var isAsync: Bool
     public var throwsKind: ThrowsKindSyntax
@@ -318,6 +343,7 @@ public struct InitializerDeclarationSyntax: SyntaxNode {
     public init(
         parameters: [ParameterSyntax] = [],
         accessLevel: AccessLevelSyntax? = nil,
+        attributes: [AttributeSyntax] = [],
         failableKind: InitializerFailabilitySyntax = .none,
         isAsync: Bool = false,
         throwsKind: ThrowsKindSyntax = .none,
@@ -325,6 +351,7 @@ public struct InitializerDeclarationSyntax: SyntaxNode {
     ) {
         self.parameters = parameters
         self.accessLevel = accessLevel
+        self.attributes = attributes
         self.failableKind = failableKind
         self.isAsync = isAsync
         self.throwsKind = throwsKind
@@ -372,8 +399,30 @@ public enum RelationshipKindSyntax: String, Equatable, Sendable {
     case inherits
     case conforms
     case references
+    case owns
+    case contains
     case accepts
     case returns
+    case extends
+}
+
+public struct ExtensionDeclarationSyntax: SyntaxNode {
+    public var extendedType: TypeReferenceSyntax
+    public var conformances: [TypeReferenceSyntax]
+    public var members: [MemberSyntax]
+    public var range: SyntaxRange
+
+    public init(
+        extendedType: TypeReferenceSyntax,
+        conformances: [TypeReferenceSyntax] = [],
+        members: [MemberSyntax] = [],
+        range: SyntaxRange
+    ) {
+        self.extendedType = extendedType
+        self.conformances = conformances
+        self.members = members
+        self.range = range
+    }
 }
 
 public struct RelationshipSyntax: SyntaxNode {
@@ -403,11 +452,14 @@ public struct RelationshipSyntax: SyntaxNode {
 
 public enum TopLevelSyntax: SyntaxNode {
     case declaration(TypeDeclarationSyntax)
+    case `extension`(ExtensionDeclarationSyntax)
     case relationship(RelationshipSyntax)
 
     public var range: SyntaxRange {
         switch self {
         case .declaration(let declaration):
+            declaration.range
+        case .extension(let declaration):
             declaration.range
         case .relationship(let relationship):
             relationship.range

@@ -2,7 +2,7 @@
 
 SwiftDiagram is a Swift-native text language and command-line tool for architecture diagrams. Authored `.swd` files produce deterministic Mermaid or PlantUML class diagrams that can be reviewed alongside source code. Unlike source-to-UML converters, SwiftDiagram starts from an explicit architecture model; Swift source inspection is a separate, later workflow that will feed the same semantic model.
 
-The current development baseline implements Milestone 3: member signatures and dual Mermaid/PlantUML rendering.
+The current development baseline implements Milestone 4: extensions, method modifiers, ownership relationships, and canonical formatting.
 
 ## Installation
 
@@ -34,19 +34,21 @@ Validate and render it:
 
 ```bash
 swift run swiftdiagram validate Architecture.swd
+swift run swiftdiagram format Architecture.swd --check
 swift run swiftdiagram render Architecture.swd --output Architecture.mmd
 swift run swiftdiagram render Architecture.swd --format plantuml --output Architecture.puml
+swift run swiftdiagram render Architecture.swd --extensions separate
 ```
 
-Without `--output`, `render` writes the selected format to standard output. Mermaid is the default. See [`Examples/BasicTypes.swd`](Examples/BasicTypes.swd) for the core language and [`Examples/Members.swd`](Examples/Members.swd) for member signatures and access control.
+Without `--output`, `render` writes the selected format to standard output. Mermaid and merged extensions are the defaults. See [`Examples/BasicTypes.swd`](Examples/BasicTypes.swd) for the core language, [`Examples/Members.swd`](Examples/Members.swd) for member signatures and access control, and [`Examples/Extensions.swd`](Examples/Extensions.swd) for Milestone 4 syntax.
 
 ## Current Language
 
-The current parser supports access-controlled `struct`, `class`, `enum`, and `protocol` declarations; properties and protocol requirements; methods with parameters, effects, and return types; failable initializers; enum associated values; `inherits`, `conforms`, `references`, `accepts`, and `returns`; and line and nested block comments.
+The current parser supports access-controlled `struct`, `class`, `enum`, and `protocol` declarations; extensions; attributed and computed properties; static and mutating methods; failable initializers; enum associated values; every relationship from `inherits` through `extends`; and line and nested block comments.
 
 Property types support qualified names, optionals, arrays, dictionaries, generic arguments, tuples, function types including `@escaping`, `some`, `any`, and `inout`. Invalid type text is retained as unresolved syntax and reported with a source-located diagnostic.
 
-Static and mutating method syntax, attributes, extensions, configuration, formatting, JSON interchange, and Swift source inspection belong to later milestones and are not implemented yet. Both renderers already honor static methods present in the semantic model so imported and programmatically constructed diagrams retain that meaning.
+Extensions remain distinct in the semantic model and can be rendered as merged, separate, or hidden without changing that model. `swiftdiagram format` uses syntax tokens and trivia rather than semantic lowering, preserving comments while producing canonical layout. Configuration, JSON interchange, and Swift source inspection belong to later milestones.
 
 ## Development
 

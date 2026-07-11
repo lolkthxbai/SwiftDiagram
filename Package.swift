@@ -98,6 +98,7 @@ let package = Package(
                 "SwiftDiagramParser",
                 "SwiftDiagramPlantUML",
                 "SwiftDiagramRendering",
+                "SwiftDiagramSyntax",
                 "SwiftDiagramSwiftSyntax",
                 "SwiftDiagramValidation"
             ]
@@ -106,6 +107,7 @@ let package = Package(
             name: "swiftdiagram",
             dependencies: [
                 "SwiftDiagramCore",
+                "SwiftDiagramRendering",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
@@ -132,6 +134,14 @@ let package = Package(
             dependencies: [
                 "SwiftDiagramModel",
                 "SwiftDiagramValidation"
+            ]
+        ),
+        .testTarget(
+            name: "SwiftDiagramFormatterTests",
+            dependencies: [
+                "SwiftDiagramFormatter",
+                "SwiftDiagramSyntax",
+                "SwiftDiagramSyntaxParser"
             ]
         ),
         .testTarget(

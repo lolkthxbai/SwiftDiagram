@@ -53,6 +53,28 @@ final class CLITests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("Invalid.swd:1:22: error SWD1018"), result.stderr)
     }
 
+    func testFormatCheckAndInPlaceWorkflow() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let input = temporaryDirectory.appendingPathComponent("Format.swd")
+        try "struct User{let id:UUID}".write(to: input, atomically: true, encoding: .utf8)
+
+        let initialCheck = try runCLI(["format", input.path, "--check"])
+        XCTAssertNotEqual(initialCheck.status, 0)
+        XCTAssertTrue(initialCheck.stderr.contains("not canonically formatted"))
+
+        let rewrite = try runCLI(["format", input.path, "--in-place"])
+        XCTAssertEqual(rewrite.status, 0, rewrite.stderr)
+        XCTAssertEqual(try String(contentsOf: input, encoding: .utf8), "struct User {\n    let id: UUID\n}\n")
+
+        let finalCheck = try runCLI(["format", input.path, "--check"])
+        XCTAssertEqual(finalCheck.status, 0, finalCheck.stderr)
+        XCTAssertTrue(finalCheck.stdout.isEmpty)
+        XCTAssertTrue(finalCheck.stderr.isEmpty)
+    }
+
     private func runCLI(_ arguments: [String]) throws -> (status: Int32, stdout: String, stderr: String) {
         let process = Process()
         process.executableURL = repositoryRoot.appendingPathComponent(".build/debug/swiftdiagram")

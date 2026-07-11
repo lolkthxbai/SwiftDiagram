@@ -168,4 +168,43 @@ final class ValidationTests: XCTestCase {
 
         XCTAssertEqual(diagnostics.map(\.code.rawValue), ["SWD2002"])
     }
+
+    func testOwnershipAndContainmentValidateWrappedCollectionMembers() {
+        let diagram = Diagram(
+            declarations: [
+                TypeDeclaration(
+                    kind: .struct,
+                    name: "Team",
+                    members: [
+                        .property(
+                            PropertyDeclaration(
+                                name: "users",
+                                type: .optional(.array(.named("User", genericArguments: []))),
+                                mutability: .variable
+                            )
+                        )
+                    ]
+                ),
+                TypeDeclaration(kind: .struct, name: "User")
+            ],
+            relationships: [
+                Relationship(
+                    source: "Team",
+                    target: "User",
+                    kind: .owns,
+                    throughMember: "users",
+                    origin: .explicit
+                ),
+                Relationship(
+                    source: "Team",
+                    target: "User",
+                    kind: .contains,
+                    throughMember: "users",
+                    origin: .explicit
+                )
+            ]
+        )
+
+        XCTAssertTrue(SwiftDiagramValidator().validate(diagram).isEmpty)
+    }
 }

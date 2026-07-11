@@ -2,11 +2,17 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-07-11
+
+- Added extensions, attributes, static and mutating methods, computed property signatures, and explicit `owns`, `contains`, and `extends` relationships.
+- Added merged, separate, and hidden extension rendering for Mermaid and PlantUML without mutating the semantic model.
+- Added syntax-layer canonical formatting, comment preservation, `format --check`, in-place formatting, and extension-mode golden fixtures.
+
 ## 0.3.1 - 2026-07-11
 
 - Pinned GitHub Actions to macOS 26 so CI and release checks use the required Swift 6.3 toolchain.
 
-## 0.3.0 - 2026-07-10
+## 0.3.0 - 2026-07-11
 
 - Added access-controlled methods, initializers, enum associated values, and `accepts` and `returns` relationships.
 - Added deterministic PlantUML output, dual-format member fixtures, Swift stereotypes, and static-member rendering.

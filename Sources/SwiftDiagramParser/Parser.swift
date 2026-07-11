@@ -37,6 +37,10 @@ public struct SwiftDiagramParser: DiagramParsing, Sendable {
             guard case .declaration(let declaration) = statement else { return nil }
             return declaration
         }
+        let extensions = sourceFile.statements.compactMap { statement -> ExtensionDeclaration? in
+            guard case .extension(let declaration) = statement else { return nil }
+            return lowerExtension(declaration)
+        }
         var declarations = declarationSyntax.map(lowerDeclaration)
         let symbols = makeSymbolTable(declarations)
         var clauseRelationships: [Relationship] = []
@@ -99,6 +103,7 @@ public struct SwiftDiagramParser: DiagramParsing, Sendable {
             diagram: Diagram(
                 metadata: metadata,
                 declarations: declarations,
+                extensions: extensions,
                 relationships: clauseRelationships + explicitRelationships
             ),
             diagnostics: diagnostics
@@ -163,6 +168,8 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
                 mutability: property.mutability == .letProperty ? .constant : .variable,
                 accessLevel: property.accessLevel.map(AccessLevel.init),
                 accessor: property.accessor.map(PropertyAccessor.init),
+                attributes: property.attributes.map(lowerAttribute),
+                isolation: isolation(from: property.attributes),
                 sourceLocation: SourceRange(property.range)
             )
         )
@@ -173,8 +180,11 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
                 parameters: method.parameters.map(lowerParameter),
                 returnType: method.returnType.map(lowerType),
                 accessLevel: method.accessLevel.map(AccessLevel.init),
+                isStatic: method.isStatic,
+                isMutating: method.isMutating,
                 isAsync: method.isAsync,
                 throwsKind: ThrowsKind(method.throwsKind),
+                isolation: isolation(from: method.attributes),
                 sourceLocation: SourceRange(method.range)
             )
         )
@@ -198,6 +208,24 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
             )
         )
     }
+}
+
+private func lowerExtension(_ syntax: ExtensionDeclarationSyntax) -> ExtensionDeclaration {
+    ExtensionDeclaration(
+        extendedType: lowerType(syntax.extendedType),
+        conformances: syntax.conformances.map(lowerType),
+        members: syntax.members.map(lowerMember),
+        sourceLocation: SourceRange(syntax.range)
+    )
+}
+
+private func lowerAttribute(_ syntax: AttributeSyntax) -> Attribute {
+    Attribute(name: syntax.name, argumentText: syntax.argumentText)
+}
+
+private func isolation(from attributes: [AttributeSyntax]) -> Isolation? {
+    guard let attribute = attributes.first(where: { $0.name == "MainActor" }) else { return nil }
+    return .globalActor(QualifiedName(attribute.name))
 }
 
 private func lowerParameter(_ syntax: ParameterSyntax) -> Parameter {
@@ -466,8 +494,11 @@ private extension RelationshipKind {
         case .inherits: self = .inherits
         case .conforms: self = .conforms
         case .references: self = .references
+        case .owns: self = .owns
+        case .contains: self = .contains
         case .accepts: self = .accepts
         case .returns: self = .returns
+        case .extends: self = .extends
         }
     }
 }

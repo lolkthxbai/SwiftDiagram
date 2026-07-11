@@ -7,11 +7,12 @@ struct LexResult {
 
 struct Lexer {
     private static let keywords: Set<String> = [
-        "accepts", "any", "async", "case", "class", "conforms", "diagram", "enum",
+        "accepts", "any", "async", "case", "class", "conforms", "contains", "diagram", "enum",
+        "extension", "extends",
         "fileprivate", "func", "get", "inherits", "init", "inout", "internal", "label",
-        "let", "open", "package", "private", "protocol", "public", "references",
+        "let", "mutating", "open", "owns", "package", "private", "protocol", "public", "references",
         "rethrows", "returns", "set", "some", "struct", "swiftDiagram", "through",
-        "throws", "var"
+        "static", "throws", "var"
     ]
 
     private let characters: [Character]

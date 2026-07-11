@@ -1,0 +1,23 @@
+swiftDiagram 1.0
+diagram "Extension Presentation"
+
+protocol Codable {
+}
+
+struct User {
+    let id: UUID
+    @MainActor
+    var displayName: String { get }
+    static func guest() -> User
+    mutating func rename(to name: String)
+}
+
+extension User: Codable {
+    func encodedName() -> String
+}
+
+struct Team {
+    var members: [User]
+}
+
+Team contains User through members

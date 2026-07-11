@@ -21,6 +21,13 @@ public struct SwiftDiagramValidator: DiagramValidating, Sendable {
             fileName: fileName,
             diagnostics: &diagnostics
         )
+        validateExtensions(
+            diagram.extensions,
+            declarationsByName: declarationsByName,
+            knownKinds: knownKinds,
+            fileName: fileName,
+            diagnostics: &diagnostics
+        )
         validateRelationships(
             diagram.relationships,
             declarationsByName: declarationsByName,
@@ -30,6 +37,60 @@ public struct SwiftDiagramValidator: DiagramValidating, Sendable {
         )
 
         return diagnostics.sorted(by: diagnosticOrder)
+    }
+}
+
+private func validateExtensions(
+    _ extensions: [ExtensionDeclaration],
+    declarationsByName: [QualifiedName: [TypeDeclaration]],
+    knownKinds: [QualifiedName: TypeKind],
+    fileName: String?,
+    diagnostics: inout [Diagnostic]
+) {
+    for declaration in extensions {
+        guard case .named(let target, _) = declaration.extendedType else {
+            diagnostics.append(
+                makeDiagnostic(
+                    .error,
+                    "SWD2018",
+                    "extension target must be a named type",
+                    fileName,
+                    declaration.sourceLocation
+                )
+            )
+            continue
+        }
+
+        var seenMembers: Set<String> = []
+        for member in declaration.members {
+            guard let identity = memberIdentity(member) else { continue }
+            if !seenMembers.insert(identity).inserted {
+                diagnostics.append(
+                    makeDiagnostic(
+                        .error,
+                        "SWD2002",
+                        "duplicate member '\(memberDisplayName(member))' in extension of '\(target)'",
+                        fileName,
+                        memberSourceLocation(member)
+                    )
+                )
+            }
+        }
+
+        for conformance in declaration.conformances {
+            guard case .named(let name, _) = conformance,
+                  declarationsByName[name] != nil,
+                  knownKinds[name] != .protocol else { continue }
+            diagnostics.append(
+                makeDiagnostic(
+                    .error,
+                    "SWD2015",
+                    "conformance target '\(name)' is not a protocol",
+                    fileName,
+                    declaration.sourceLocation
+                )
+            )
+        }
     }
 }
 
@@ -117,7 +178,7 @@ private func validateRelationships(
             continue
         }
 
-        if (relationship.kind == .references || relationship.kind == .accepts || relationship.kind == .returns) &&
+        if [.references, .owns, .contains, .accepts, .returns, .extends].contains(relationship.kind) &&
             declarationsByName[relationship.target] == nil {
             diagnostics.append(
                 makeDiagnostic(
@@ -151,7 +212,7 @@ private func validateRelationships(
                 )
                 continue
             }
-            if memberReferencedType(member) != relationship.target {
+            if !memberReferencesType(member, target: relationship.target) {
                 diagnostics.append(
                     makeDiagnostic(
                         .error,
@@ -318,13 +379,42 @@ private func memberSourceLocation(_ member: Member) -> SourceRange? {
     }
 }
 
-private func memberReferencedType(_ member: Member) -> QualifiedName? {
-    guard case .property(let property) = member,
-          case .named(let name, let genericArguments) = property.type,
-          genericArguments.isEmpty else {
-        return nil
+private func memberReferencesType(_ member: Member, target: QualifiedName) -> Bool {
+    switch member {
+    case .property(let property):
+        return type(property.type, contains: target)
+    case .method(let method):
+        return method.parameters.contains { type($0.type, contains: target) } ||
+            method.returnType.map { type($0, contains: target) } == true
+    case .initializer(let initializer):
+        return initializer.parameters.contains { type($0.type, contains: target) }
+    case .enumCase(let enumCase):
+        return enumCase.associatedValues.contains { type($0.type, contains: target) }
+    case .typeAlias(let typeAlias):
+        return type(typeAlias.assignedType, contains: target)
     }
-    return name
+}
+
+private func type(_ reference: TypeReference, contains target: QualifiedName) -> Bool {
+    switch reference {
+    case .named(let name, let arguments):
+        return name == target || arguments.contains { type($0, contains: target) }
+    case .optional(let wrapped), .existential(let wrapped), .opaque(let wrapped), .inoutType(let wrapped):
+        return type(wrapped, contains: target)
+    case .array(let element):
+        return type(element, contains: target)
+    case .dictionary(let key, let value):
+        return type(key, contains: target) || type(value, contains: target)
+    case .tuple(let elements):
+        return elements.contains { type($0.type, contains: target) }
+    case .function(let function):
+        return function.parameters.contains { type($0, contains: target) } ||
+            type(function.returnType, contains: target)
+    case .attributed(_, let base):
+        return type(base, contains: target)
+    case .unresolved:
+        return false
+    }
 }
 
 private func relationshipIdentity(_ relationship: Relationship) -> String {
