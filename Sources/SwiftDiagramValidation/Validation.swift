@@ -52,8 +52,31 @@ private func validateDeclarations(
             )
         }
 
+        if declaration.accessLevel == .open && declaration.kind != .class {
+            diagnostics.append(
+                makeDiagnostic(
+                    .error,
+                    "SWD2016",
+                    "open access is only valid on class declarations",
+                    fileName,
+                    declaration.sourceLocation
+                )
+            )
+        }
+
         var seenMembers: Set<String> = []
         for member in declaration.members {
+            if memberAccessLevel(member) == .open && declaration.kind != .class {
+                diagnostics.append(
+                    makeDiagnostic(
+                        .error,
+                        "SWD2017",
+                        "open members are only valid in class declarations",
+                        fileName,
+                        memberSourceLocation(member)
+                    )
+                )
+            }
             guard let identity = memberIdentity(member) else { continue }
             if !seenMembers.insert(identity).inserted {
                 diagnostics.append(
@@ -94,7 +117,8 @@ private func validateRelationships(
             continue
         }
 
-        if relationship.kind == .references && declarationsByName[relationship.target] == nil {
+        if (relationship.kind == .references || relationship.kind == .accepts || relationship.kind == .returns) &&
+            declarationsByName[relationship.target] == nil {
             diagnostics.append(
                 makeDiagnostic(
                     .error,
@@ -212,8 +236,55 @@ private func memberIdentity(_ member: Member) -> String? {
         return "property:\(property.name)"
     case .enumCase(let enumCase):
         return "case:\(enumCase.name)"
-    default:
-        return nil
+    case .method(let method):
+        return "method:\(method.name):\(parameterIdentity(method.parameters))"
+    case .initializer(let initializer):
+        return "init:\(parameterIdentity(initializer.parameters))"
+    case .typeAlias(let typeAlias):
+        return "typealias:\(typeAlias.name)"
+    }
+}
+
+private func memberAccessLevel(_ member: Member) -> AccessLevel? {
+    switch member {
+    case .property(let property): return property.accessLevel
+    case .method(let method): return method.accessLevel
+    case .initializer(let initializer): return initializer.accessLevel
+    case .typeAlias(let typeAlias): return typeAlias.accessLevel
+    case .enumCase: return nil
+    }
+}
+
+private func parameterIdentity(_ parameters: [Parameter]) -> String {
+    parameters.map { parameter in
+        "\(parameter.externalName ?? ""):\(typeIdentity(parameter.type))"
+    }.joined(separator: ",")
+}
+
+private func typeIdentity(_ type: TypeReference) -> String {
+    switch type {
+    case .named(let name, let arguments):
+        return "\(name)<\(arguments.map(typeIdentity).joined(separator: ","))>"
+    case .optional(let wrapped):
+        return "\(typeIdentity(wrapped))?"
+    case .array(let element):
+        return "[\(typeIdentity(element))]"
+    case .dictionary(let key, let value):
+        return "[\(typeIdentity(key)):\(typeIdentity(value))]"
+    case .tuple(let elements):
+        return "(\(elements.map { "\($0.label ?? ""):\(typeIdentity($0.type))" }.joined(separator: ",")))"
+    case .function(let function):
+        return "(\(function.parameters.map(typeIdentity).joined(separator: ",")))->\(typeIdentity(function.returnType))"
+    case .existential(let base):
+        return "any \(typeIdentity(base))"
+    case .opaque(let base):
+        return "some \(typeIdentity(base))"
+    case .attributed(let attributes, let base):
+        return "\(attributes.map(\.name).joined(separator: ",")) \(typeIdentity(base))"
+    case .inoutType(let base):
+        return "inout \(typeIdentity(base))"
+    case .unresolved(let text):
+        return "unresolved:\(text)"
     }
 }
 

@@ -1,8 +1,8 @@
 # SwiftDiagram
 
-SwiftDiagram is a Swift-native text language and command-line tool for architecture diagrams. Authored `.swd` files produce deterministic Mermaid class diagrams that can be reviewed alongside source code. Unlike source-to-UML converters, SwiftDiagram starts from an explicit architecture model; Swift source inspection is a separate, later workflow that will feed the same semantic model.
+SwiftDiagram is a Swift-native text language and command-line tool for architecture diagrams. Authored `.swd` files produce deterministic Mermaid or PlantUML class diagrams that can be reviewed alongside source code. Unlike source-to-UML converters, SwiftDiagram starts from an explicit architecture model; Swift source inspection is a separate, later workflow that will feed the same semantic model.
 
-The current development baseline implements Milestone 2: the complete type-reference grammar on top of the core `.swd`-to-Mermaid vertical slice.
+The current development baseline implements Milestone 3: member signatures and dual Mermaid/PlantUML rendering.
 
 ## Installation
 
@@ -35,17 +35,18 @@ Validate and render it:
 ```bash
 swift run swiftdiagram validate Architecture.swd
 swift run swiftdiagram render Architecture.swd --output Architecture.mmd
+swift run swiftdiagram render Architecture.swd --format plantuml --output Architecture.puml
 ```
 
-Without `--output`, `render` writes Mermaid to standard output. See [`Examples/BasicTypes.swd`](Examples/BasicTypes.swd) for declarations, enum cases, inheritance, conformance, references, comments, a title, and a language-version directive.
+Without `--output`, `render` writes the selected format to standard output. Mermaid is the default. See [`Examples/BasicTypes.swd`](Examples/BasicTypes.swd) for the core language and [`Examples/Members.swd`](Examples/Members.swd) for member signatures and access control.
 
 ## Current Language
 
-The current parser supports `struct`, `class`, `enum`, and `protocol` declarations; `let` and `var` properties; protocol property requirements; enum cases without associated values; `inherits`, `conforms`, and `references`; and line and nested block comments.
+The current parser supports access-controlled `struct`, `class`, `enum`, and `protocol` declarations; properties and protocol requirements; methods with parameters, effects, and return types; failable initializers; enum associated values; `inherits`, `conforms`, `references`, `accepts`, and `returns`; and line and nested block comments.
 
 Property types support qualified names, optionals, arrays, dictionaries, generic arguments, tuples, function types including `@escaping`, `some`, `any`, and `inout`. Invalid type text is retained as unresolved syntax and reported with a source-located diagnostic.
 
-Methods, access control, extensions, PlantUML, configuration, formatting, JSON interchange, and Swift source inspection belong to later milestones and are not implemented yet.
+Static and mutating method syntax, attributes, extensions, configuration, formatting, JSON interchange, and Swift source inspection belong to later milestones and are not implemented yet. Both renderers already honor static methods present in the semantic model so imported and programmatically constructed diagrams retain that meaning.
 
 ## Development
 

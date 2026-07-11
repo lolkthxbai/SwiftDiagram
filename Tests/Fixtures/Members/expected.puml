@@ -1,0 +1,25 @@
+@startuml
+hide empty members
+class "Repository" as Repository <<class>> <<open>> {
+    -cached : [User]
+    +init(seed: [User])
+    +init?(rawValue: String)
+    +find(id: UUID) : User?
+}
+enum "ResultState" as ResultState <<enum>> <<public>> {
+    idle
+    loaded(items: [User])
+    pair(String, Int)
+    failed(error: Error)
+}
+interface "Service" as Service <<protocol>> <<public>> {
+    +id : UUID
+    +fetch(id: UUID) async throws : User?
+}
+class "User" as User <<struct>> <<public>> {
+    +id : UUID
+    ~name : String
+}
+Repository ..> User : accepts
+Repository ..> User : returns
+@enduml

@@ -179,9 +179,19 @@ public enum DeclarationKindSyntax: String, Equatable, Sendable {
     case `protocol`
 }
 
+public enum AccessLevelSyntax: String, Equatable, Sendable {
+    case `private`
+    case `fileprivate`
+    case `internal`
+    case package
+    case `public`
+    case open
+}
+
 public struct TypeDeclarationSyntax: SyntaxNode {
     public var kind: DeclarationKindSyntax
     public var name: NamedTypeSyntax
+    public var accessLevel: AccessLevelSyntax?
     public var inheritedTypes: [NamedTypeSyntax]
     public var members: [MemberSyntax]
     public var range: SyntaxRange
@@ -189,12 +199,14 @@ public struct TypeDeclarationSyntax: SyntaxNode {
     public init(
         kind: DeclarationKindSyntax,
         name: NamedTypeSyntax,
+        accessLevel: AccessLevelSyntax? = nil,
         inheritedTypes: [NamedTypeSyntax] = [],
         members: [MemberSyntax] = [],
         range: SyntaxRange
     ) {
         self.kind = kind
         self.name = name
+        self.accessLevel = accessLevel
         self.inheritedTypes = inheritedTypes
         self.members = members
         self.range = range
@@ -215,6 +227,7 @@ public struct PropertyDeclarationSyntax: SyntaxNode {
     public var mutability: PropertyMutabilitySyntax
     public var name: String
     public var type: TypeReferenceSyntax
+    public var accessLevel: AccessLevelSyntax?
     public var accessor: PropertyAccessorSyntax?
     public var range: SyntaxRange
 
@@ -222,37 +235,135 @@ public struct PropertyDeclarationSyntax: SyntaxNode {
         mutability: PropertyMutabilitySyntax,
         name: String,
         type: TypeReferenceSyntax,
+        accessLevel: AccessLevelSyntax? = nil,
         accessor: PropertyAccessorSyntax? = nil,
         range: SyntaxRange
     ) {
         self.mutability = mutability
         self.name = name
         self.type = type
+        self.accessLevel = accessLevel
         self.accessor = accessor
+        self.range = range
+    }
+}
+
+public struct ParameterSyntax: SyntaxNode {
+    public var externalName: String?
+    public var localName: String?
+    public var type: TypeReferenceSyntax
+    public var range: SyntaxRange
+
+    public init(
+        externalName: String? = nil,
+        localName: String? = nil,
+        type: TypeReferenceSyntax,
+        range: SyntaxRange
+    ) {
+        self.externalName = externalName
+        self.localName = localName
+        self.type = type
+        self.range = range
+    }
+}
+
+public enum ThrowsKindSyntax: String, Equatable, Sendable {
+    case none
+    case `throws`
+    case `rethrows`
+}
+
+public struct MethodDeclarationSyntax: SyntaxNode {
+    public var name: String
+    public var parameters: [ParameterSyntax]
+    public var returnType: TypeReferenceSyntax?
+    public var accessLevel: AccessLevelSyntax?
+    public var isAsync: Bool
+    public var throwsKind: ThrowsKindSyntax
+    public var range: SyntaxRange
+
+    public init(
+        name: String,
+        parameters: [ParameterSyntax] = [],
+        returnType: TypeReferenceSyntax? = nil,
+        accessLevel: AccessLevelSyntax? = nil,
+        isAsync: Bool = false,
+        throwsKind: ThrowsKindSyntax = .none,
+        range: SyntaxRange
+    ) {
+        self.name = name
+        self.parameters = parameters
+        self.returnType = returnType
+        self.accessLevel = accessLevel
+        self.isAsync = isAsync
+        self.throwsKind = throwsKind
+        self.range = range
+    }
+}
+
+public enum InitializerFailabilitySyntax: Equatable, Sendable {
+    case none
+    case optional
+    case implicitlyUnwrapped
+}
+
+public struct InitializerDeclarationSyntax: SyntaxNode {
+    public var parameters: [ParameterSyntax]
+    public var accessLevel: AccessLevelSyntax?
+    public var failableKind: InitializerFailabilitySyntax
+    public var isAsync: Bool
+    public var throwsKind: ThrowsKindSyntax
+    public var range: SyntaxRange
+
+    public init(
+        parameters: [ParameterSyntax] = [],
+        accessLevel: AccessLevelSyntax? = nil,
+        failableKind: InitializerFailabilitySyntax = .none,
+        isAsync: Bool = false,
+        throwsKind: ThrowsKindSyntax = .none,
+        range: SyntaxRange
+    ) {
+        self.parameters = parameters
+        self.accessLevel = accessLevel
+        self.failableKind = failableKind
+        self.isAsync = isAsync
+        self.throwsKind = throwsKind
         self.range = range
     }
 }
 
 public struct EnumCaseDeclarationSyntax: SyntaxNode {
     public var name: String
+    public var associatedValues: [ParameterSyntax]
     public var range: SyntaxRange
 
-    public init(name: String, range: SyntaxRange) {
+    public init(
+        name: String,
+        associatedValues: [ParameterSyntax] = [],
+        range: SyntaxRange
+    ) {
         self.name = name
+        self.associatedValues = associatedValues
         self.range = range
     }
 }
 
 public enum MemberSyntax: SyntaxNode {
     case property(PropertyDeclarationSyntax)
+    case method(MethodDeclarationSyntax)
     case enumCase(EnumCaseDeclarationSyntax)
+    case initializer(InitializerDeclarationSyntax)
 
     public var range: SyntaxRange {
         switch self {
         case .property(let property):
             property.range
+        case .method(let method):
+            method.range
         case .enumCase(let enumCase):
             enumCase.range
+        case .initializer(let initializer):
+            initializer.range
         }
     }
 }
@@ -261,6 +372,8 @@ public enum RelationshipKindSyntax: String, Equatable, Sendable {
     case inherits
     case conforms
     case references
+    case accepts
+    case returns
 }
 
 public struct RelationshipSyntax: SyntaxNode {

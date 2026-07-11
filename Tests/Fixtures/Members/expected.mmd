@@ -1,0 +1,31 @@
+classDiagram
+    class Repository {
+        <<class>>
+        <<open>>
+        -[User] cached
+        +init(seed: [User])
+        +init?(rawValue: String)
+        +find(id: UUID) User?
+    }
+    class ResultState {
+        <<enum>>
+        <<public>>
+        idle
+        loaded(items: [User])
+        pair(String, Int)
+        failed(error: Error)
+    }
+    class Service {
+        <<protocol>>
+        <<public>>
+        +UUID id
+        +fetch(id: UUID) async throws User?
+    }
+    class User {
+        <<struct>>
+        <<public>>
+        +UUID id
+        ~String name
+    }
+    Repository ..> User : accepts
+    Repository ..> User : returns

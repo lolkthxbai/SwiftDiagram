@@ -215,4 +215,56 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(text, "Result<User,>")
         XCTAssertEqual(recovered.type, .named("String", genericArguments: []))
     }
+
+    func testLowersMilestoneThreeMembersAccessAndRelationships() throws {
+        let source = """
+        public protocol Service {
+            public var id: UUID { get }
+            public func fetch(_ value: User, named name: String) async throws -> User?
+        }
+        open class Repository {
+            public init?(rawValue: String)
+        }
+        public enum State {
+            case idle, loaded(items: [User]), pair(String, Int)
+        }
+        struct User {}
+        Repository accepts User
+        Repository returns User
+        """
+
+        let result = SwiftDiagramParser().parse(source: source, fileName: "Members.swd")
+
+        XCTAssertFalse(result.hasErrors, result.diagnostics.map(\.message).joined(separator: "\n"))
+        let service = try XCTUnwrap(result.diagram?.declarations[0])
+        XCTAssertEqual(service.accessLevel, .public)
+        guard case .property(let property) = service.members[0],
+              case .method(let method) = service.members[1] else {
+            return XCTFail("Expected a property and method")
+        }
+        XCTAssertEqual(property.accessLevel, .public)
+        XCTAssertEqual(method.parameters[0].externalName, "_")
+        XCTAssertEqual(method.parameters[0].localName, "value")
+        XCTAssertEqual(method.parameters[1].externalName, "named")
+        XCTAssertEqual(method.parameters[1].localName, "name")
+        XCTAssertTrue(method.isAsync)
+        XCTAssertEqual(method.throwsKind, .throws)
+        XCTAssertEqual(method.returnType, .optional(.named("User", genericArguments: [])))
+
+        let repository = try XCTUnwrap(result.diagram?.declarations[1])
+        XCTAssertEqual(repository.accessLevel, .open)
+        guard case .initializer(let initializer) = repository.members.first else {
+            return XCTFail("Expected an initializer")
+        }
+        XCTAssertEqual(initializer.failableKind, .optional)
+
+        let state = try XCTUnwrap(result.diagram?.declarations[2])
+        XCTAssertEqual(state.members.count, 3)
+        guard case .enumCase(let loaded) = state.members[1] else {
+            return XCTFail("Expected an associated-value case")
+        }
+        XCTAssertEqual(loaded.associatedValues.first?.externalName, "items")
+        XCTAssertEqual(loaded.associatedValues.first?.type, .array(.named("User", genericArguments: [])))
+        XCTAssertEqual(result.diagram?.relationships.map(\.kind), [.accepts, .returns])
+    }
 }

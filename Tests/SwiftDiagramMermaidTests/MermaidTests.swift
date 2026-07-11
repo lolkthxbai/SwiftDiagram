@@ -1,6 +1,9 @@
 import Foundation
 import XCTest
 import SwiftDiagramCore
+import SwiftDiagramMermaid
+import SwiftDiagramModel
+import SwiftDiagramRendering
 
 final class MermaidTests: XCTestCase {
     func testBasicFixtureMatchesGoldenOutput() throws {
@@ -52,6 +55,31 @@ final class MermaidTests: XCTestCase {
 
         XCTAssertFalse(result.hasErrors, result.diagnostics.map(DiagnosticFormatter.format).joined(separator: "\n"))
         XCTAssertEqual(result.output, expected)
+    }
+
+    func testStaticMethodUsesMermaidStaticClassifier() throws {
+        let diagram = Diagram(
+            declarations: [
+                TypeDeclaration(
+                    kind: .struct,
+                    name: "Factory",
+                    members: [
+                        .method(
+                            MethodDeclaration(
+                                name: "make",
+                                returnType: .named("Factory", genericArguments: []),
+                                accessLevel: .public,
+                                isStatic: true
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let output = try MermaidRenderer().render(diagram, options: RenderOptions())
+
+        XCTAssertTrue(output.contains("+make() Factory$"))
     }
 
     private var repositoryRoot: URL {

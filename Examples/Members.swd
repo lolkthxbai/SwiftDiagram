@@ -1,0 +1,28 @@
+swiftDiagram 1.0
+diagram "Member Signatures"
+
+public protocol Service {
+    public var id: UUID { get }
+    public func fetch(id: UUID) async throws -> User?
+}
+
+open class Repository {
+    private var cached: [User]
+    public init(seed: [User])
+    public init?(rawValue: String)
+    open func find(id: UUID) -> User?
+}
+
+public enum ResultState {
+    case idle
+    case loaded(items: [User])
+    case pair(String, Int), failed(error: Error)
+}
+
+public struct User {
+    public let id: UUID
+    internal var name: String
+}
+
+Repository accepts User
+Repository returns User

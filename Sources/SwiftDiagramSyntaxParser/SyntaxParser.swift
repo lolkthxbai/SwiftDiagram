@@ -58,8 +58,8 @@ private struct Parser {
 
         while !isAtEnd {
             let startingIndex = index
-            if let kind = declarationKind() {
-                if let declaration = parseDeclaration(kind: kind) {
+            if let prefix = declarationPrefix() {
+                if let declaration = parseDeclaration(prefix: prefix) {
                     statements.append(.declaration(declaration))
                 }
             } else if current.kind == .identifier {
@@ -116,8 +116,13 @@ private struct Parser {
         )
     }
 
-    private mutating func parseDeclaration(kind: DeclarationKindSyntax) -> TypeDeclarationSyntax? {
-        let start = advance().range.start
+    private mutating func parseDeclaration(prefix: DeclarationPrefix) -> TypeDeclarationSyntax? {
+        let start = current.range.start
+        if prefix.accessLevel != nil {
+            advance()
+        }
+        let kind = prefix.kind
+        advance()
         guard let name = parseNamedType(message: "expected a type name") else {
             recoverTopLevel()
             return nil
@@ -144,19 +149,34 @@ private struct Parser {
         var members: [MemberSyntax] = []
         while !isAtEnd && !isPunctuation("}") {
             let startingIndex = index
+            let memberStart = current.range.start
+            let accessLevel = consumeAccessLevel()
             if isKeyword("let") || isKeyword("var") {
-                if let property = parseProperty() {
+                if let property = parseProperty(accessLevel: accessLevel, start: memberStart) {
                     members.append(.property(property))
                 }
+            } else if isKeyword("func") {
+                if let method = parseMethod(accessLevel: accessLevel, start: memberStart) {
+                    members.append(.method(method))
+                }
+            } else if isKeyword("init") {
+                if let initializer = parseInitializer(accessLevel: accessLevel, start: memberStart) {
+                    members.append(.initializer(initializer))
+                }
             } else if isKeyword("case") {
+                if accessLevel != nil {
+                    diagnose(
+                        code: "SWD1029",
+                        message: "enum cases cannot have access modifiers",
+                        at: SyntaxRange(start: memberStart, end: current.range.start)
+                    )
+                }
                 if kind != .enum {
                     diagnose(code: "SWD1014", message: "enum cases are only valid inside enum declarations", at: current.range)
                 }
-                if let enumCase = parseEnumCase() {
-                    members.append(.enumCase(enumCase))
-                }
+                members.append(contentsOf: parseEnumCases().map(MemberSyntax.enumCase))
             } else {
-                diagnose(code: "SWD1015", message: "expected a property or enum case", at: current.range)
+                diagnose(code: "SWD1015", message: "expected a property, method, initializer, or enum case", at: current.range)
                 recoverMember()
             }
 
@@ -176,13 +196,17 @@ private struct Parser {
         return TypeDeclarationSyntax(
             kind: kind,
             name: name,
+            accessLevel: prefix.accessLevel,
             inheritedTypes: inheritedTypes,
             members: members,
             range: SyntaxRange(start: start, end: end)
         )
     }
 
-    private mutating func parseProperty() -> PropertyDeclarationSyntax? {
+    private mutating func parseProperty(
+        accessLevel: AccessLevelSyntax?,
+        start: SyntaxPosition
+    ) -> PropertyDeclarationSyntax? {
         let mutabilityToken = advance()
         let mutability: PropertyMutabilitySyntax = mutabilityToken.text == "let" ? .letProperty : .varProperty
 
@@ -228,7 +252,8 @@ private struct Parser {
                     mutability: mutability,
                     name: name.text,
                     type: type,
-                    range: SyntaxRange(start: mutabilityToken.range.start, end: openBrace.range.end)
+                    accessLevel: accessLevel,
+                    range: SyntaxRange(start: start, end: openBrace.range.end)
                 )
             }
             advance()
@@ -250,9 +275,167 @@ private struct Parser {
             mutability: mutability,
             name: name.text,
             type: type,
+            accessLevel: accessLevel,
             accessor: accessor,
-            range: SyntaxRange(start: mutabilityToken.range.start, end: end)
+            range: SyntaxRange(start: start, end: end)
         )
+    }
+
+    private mutating func parseMethod(
+        accessLevel: AccessLevelSyntax?,
+        start: SyntaxPosition
+    ) -> MethodDeclarationSyntax? {
+        advance()
+        guard current.kind == .identifier else {
+            diagnose(code: "SWD1030", message: "expected a method name after 'func'", at: current.range)
+            recoverMember()
+            return nil
+        }
+        let name = advance()
+
+        do {
+            let clause = try parseParameterClause(allowUnlabeled: false)
+            let effects = parseEffectSpecifiers()
+            var returnType: TypeReferenceSyntax?
+            var end = effects.end ?? clause.end
+            if isPunctuation("-") && peekToken.kind == .punctuation(">") {
+                advance()
+                advance()
+                returnType = try parseTypeReference()
+                end = returnType?.range.end ?? end
+            }
+            return MethodDeclarationSyntax(
+                name: name.text,
+                parameters: clause.parameters,
+                returnType: returnType,
+                accessLevel: accessLevel,
+                isAsync: effects.isAsync,
+                throwsKind: effects.throwsKind,
+                range: SyntaxRange(start: start, end: end)
+            )
+        } catch let failure as TypeParseFailure {
+            diagnose(code: "SWD1031", message: failure.message, at: failure.range)
+            recoverMember()
+            return nil
+        } catch {
+            diagnose(code: "SWD1031", message: "invalid method signature", at: current.range)
+            recoverMember()
+            return nil
+        }
+    }
+
+    private mutating func parseInitializer(
+        accessLevel: AccessLevelSyntax?,
+        start: SyntaxPosition
+    ) -> InitializerDeclarationSyntax? {
+        advance()
+        let failableKind: InitializerFailabilitySyntax
+        if consumePunctuation("?") != nil {
+            failableKind = .optional
+        } else if consumePunctuation("!") != nil {
+            failableKind = .implicitlyUnwrapped
+        } else {
+            failableKind = .none
+        }
+
+        do {
+            let clause = try parseParameterClause(allowUnlabeled: false)
+            let effects = parseEffectSpecifiers()
+            return InitializerDeclarationSyntax(
+                parameters: clause.parameters,
+                accessLevel: accessLevel,
+                failableKind: failableKind,
+                isAsync: effects.isAsync,
+                throwsKind: effects.throwsKind,
+                range: SyntaxRange(start: start, end: effects.end ?? clause.end)
+            )
+        } catch let failure as TypeParseFailure {
+            diagnose(code: "SWD1032", message: failure.message, at: failure.range)
+            recoverMember()
+            return nil
+        } catch {
+            diagnose(code: "SWD1032", message: "invalid initializer signature", at: current.range)
+            recoverMember()
+            return nil
+        }
+    }
+
+    private mutating func parseParameterClause(
+        allowUnlabeled: Bool
+    ) throws -> (parameters: [ParameterSyntax], end: SyntaxPosition) {
+        guard consumePunctuation("(") != nil else {
+            throw TypeParseFailure(message: "expected '(' to begin parameter list", range: current.range)
+        }
+        if let close = consumePunctuation(")") {
+            return ([], close.range.end)
+        }
+
+        var parameters: [ParameterSyntax] = []
+        while true {
+            let start = current.range.start
+            var externalName: String?
+            var localName: String?
+
+            if current.kind == .identifier && peekToken.kind == .punctuation(":") {
+                externalName = advance().text
+                advance()
+            } else if current.kind == .identifier,
+                      peekToken.kind == .identifier,
+                      token(at: index + 2).kind == .punctuation(":") {
+                externalName = advance().text
+                localName = advance().text
+                advance()
+            } else if !allowUnlabeled {
+                throw TypeParseFailure(message: "expected a parameter name and ':'", range: current.range)
+            }
+
+            let type = try parseTypeReference()
+            guard isPunctuation(",") || isPunctuation(")") else {
+                throw TypeParseFailure(message: "expected ',' or ')' after parameter", range: current.range)
+            }
+            parameters.append(
+                ParameterSyntax(
+                    externalName: externalName,
+                    localName: localName,
+                    type: type,
+                    range: SyntaxRange(start: start, end: type.range.end)
+                )
+            )
+            if consumePunctuation(",") == nil {
+                break
+            }
+        }
+
+        guard let close = consumePunctuation(")") else {
+            throw TypeParseFailure(message: "expected ')' to end parameter list", range: current.range)
+        }
+        return (parameters, close.range.end)
+    }
+
+    private mutating func parseEffectSpecifiers() -> (
+        isAsync: Bool,
+        throwsKind: ThrowsKindSyntax,
+        end: SyntaxPosition?
+    ) {
+        var isAsync = false
+        var throwsKind = ThrowsKindSyntax.none
+        var end: SyntaxPosition?
+        while isKeyword("async") || isKeyword("throws") || isKeyword("rethrows") {
+            let effect = advance()
+            end = effect.range.end
+            if effect.text == "async" {
+                if isAsync {
+                    diagnose(code: "SWD1033", message: "duplicate 'async' effect", at: effect.range)
+                }
+                isAsync = true
+            } else {
+                if throwsKind != .none {
+                    diagnose(code: "SWD1033", message: "duplicate throwing effect", at: effect.range)
+                }
+                throwsKind = effect.text == "throws" ? .throws : .rethrows
+            }
+        }
+        return (isAsync, throwsKind, end)
     }
 
     private mutating func parseTypeReference() throws -> TypeReferenceSyntax {
@@ -451,8 +634,7 @@ private struct Parser {
         if isAtEnd || isPunctuation("{") || isPunctuation("}") {
             return true
         }
-        return current.range.start.line > type.range.end.line &&
-            (isKeyword("let") || isKeyword("var") || isKeyword("case"))
+        return current.range.start.line > type.range.end.line && isMemberStart
     }
 
     private mutating func consumeUnresolvedType() -> TypeReferenceSyntax {
@@ -464,7 +646,7 @@ private struct Parser {
         while !isAtEnd && !isPunctuation("{") && !isPunctuation("}") {
             if index > startIndex,
                current.range.start.line > startLine,
-               (isKeyword("let") || isKeyword("var") || isKeyword("case")) {
+               isMemberStart {
                 break
             }
             end = advance().range.end
@@ -479,26 +661,45 @@ private struct Parser {
         )
     }
 
-    private mutating func parseEnumCase() -> EnumCaseDeclarationSyntax? {
-        let start = advance().range.start
-        guard current.kind == .identifier else {
-            diagnose(code: "SWD1022", message: "expected an enum case name", at: current.range)
-            recoverMember()
-            return nil
-        }
-        let name = advance()
-        if isPunctuation("(") {
-            diagnose(
-                code: "SWD1023",
-                message: "enum associated values are not supported until Milestone 3",
-                at: current.range
+    private mutating func parseEnumCases() -> [EnumCaseDeclarationSyntax] {
+        advance()
+        var cases: [EnumCaseDeclarationSyntax] = []
+
+        while true {
+            guard current.kind == .identifier else {
+                diagnose(code: "SWD1022", message: "expected an enum case name", at: current.range)
+                recoverMember()
+                return cases
+            }
+            let name = advance()
+            var associatedValues: [ParameterSyntax] = []
+            var end = name.range.end
+            if isPunctuation("(") {
+                do {
+                    let clause = try parseParameterClause(allowUnlabeled: true)
+                    associatedValues = clause.parameters
+                    end = clause.end
+                } catch let failure as TypeParseFailure {
+                    diagnose(code: "SWD1023", message: failure.message, at: failure.range)
+                    recoverMember()
+                    return cases
+                } catch {
+                    diagnose(code: "SWD1023", message: "invalid associated value list", at: current.range)
+                    recoverMember()
+                    return cases
+                }
+            }
+            cases.append(
+                EnumCaseDeclarationSyntax(
+                    name: name.text,
+                    associatedValues: associatedValues,
+                    range: SyntaxRange(start: name.range.start, end: end)
+                )
             )
-            recoverMember()
+            if consumePunctuation(",") == nil {
+                return cases
+            }
         }
-        return EnumCaseDeclarationSyntax(
-            name: name.text,
-            range: SyntaxRange(start: start, end: name.range.end)
-        )
     }
 
     private mutating func parseRelationship() -> RelationshipSyntax? {
@@ -507,7 +708,7 @@ private struct Parser {
               let kind = RelationshipKindSyntax(rawValue: relationshipText) else {
             diagnose(
                 code: "SWD1024",
-                message: "expected 'inherits', 'conforms', or 'references' after relationship source",
+                message: "expected a supported relationship kind after relationship source",
                 at: current.range
             )
             recoverTopLevel()
@@ -566,9 +767,8 @@ private struct Parser {
     }
 
     private mutating func recoverMember() {
-        let line = current.range.start.line
         while !isAtEnd && !isPunctuation("}") {
-            if current.range.start.line > line || isKeyword("let") || isKeyword("var") || isKeyword("case") {
+            if isMemberStart {
                 return
             }
             advance()
@@ -585,7 +785,7 @@ private struct Parser {
     private mutating func recoverTopLevel() {
         let line = current.range.start.line
         while !isAtEnd {
-            if current.range.start.line > line && (declarationKind() != nil || current.kind == .identifier) {
+            if current.range.start.line > line && (declarationPrefix() != nil || current.kind == .identifier) {
                 return
             }
             advance()
@@ -595,6 +795,30 @@ private struct Parser {
     private func declarationKind() -> DeclarationKindSyntax? {
         guard case .keyword(let text) = current.kind else { return nil }
         return DeclarationKindSyntax(rawValue: text)
+    }
+
+    private func declarationPrefix() -> DeclarationPrefix? {
+        if let kind = declarationKind() {
+            return DeclarationPrefix(accessLevel: nil, kind: kind)
+        }
+        guard let accessLevel = AccessLevelSyntax(rawValue: current.text),
+              case .keyword(let text) = peekToken.kind,
+              let kind = DeclarationKindSyntax(rawValue: text) else {
+            return nil
+        }
+        return DeclarationPrefix(accessLevel: accessLevel, kind: kind)
+    }
+
+    private mutating func consumeAccessLevel() -> AccessLevelSyntax? {
+        guard let accessLevel = AccessLevelSyntax(rawValue: current.text) else { return nil }
+        advance()
+        return accessLevel
+    }
+
+    private var isMemberStart: Bool {
+        AccessLevelSyntax(rawValue: current.text) != nil ||
+            isKeyword("let") || isKeyword("var") || isKeyword("func") ||
+            isKeyword("init") || isKeyword("case")
     }
 
     private func isKeyword(_ keyword: String) -> Bool {
@@ -613,6 +837,10 @@ private struct Parser {
 
     private var current: Token {
         tokens[min(index, tokens.count - 1)]
+    }
+
+    private func token(at tokenIndex: Int) -> Token {
+        tokens[min(tokenIndex, tokens.count - 1)]
     }
 
     private var peekToken: Token {
@@ -643,6 +871,11 @@ private struct Parser {
             )
         )
     }
+}
+
+private struct DeclarationPrefix {
+    var accessLevel: AccessLevelSyntax?
+    var kind: DeclarationKindSyntax
 }
 
 private struct TypeParseFailure: Error {

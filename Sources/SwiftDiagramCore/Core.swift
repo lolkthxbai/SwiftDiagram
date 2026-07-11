@@ -1,11 +1,13 @@
 import SwiftDiagramMermaid
 import SwiftDiagramModel
 import SwiftDiagramParser
+import SwiftDiagramPlantUML
 import SwiftDiagramRendering
 import SwiftDiagramValidation
 
 public enum OutputFormat: String, Equatable, Sendable, Codable {
     case mermaid
+    case plantuml
 }
 
 public struct CompilationResult: Equatable, Sendable {
@@ -40,11 +42,13 @@ public struct SwiftDiagramService: Sendable {
     private let parser: SwiftDiagramParser
     private let validator: SwiftDiagramValidator
     private let mermaidRenderer: MermaidRenderer
+    private let plantUMLRenderer: PlantUMLRenderer
 
     public init() {
         parser = SwiftDiagramParser()
         validator = SwiftDiagramValidator()
         mermaidRenderer = MermaidRenderer()
+        plantUMLRenderer = PlantUMLRenderer()
     }
 
     public func parseAndValidate(
@@ -78,6 +82,8 @@ public struct SwiftDiagramService: Sendable {
             switch format {
             case .mermaid:
                 output = try mermaidRenderer.render(diagram, options: options)
+            case .plantuml:
+                output = try plantUMLRenderer.render(diagram, options: options)
             }
             return RenderingResult(output: output, diagnostics: compilation.diagnostics)
         } catch {

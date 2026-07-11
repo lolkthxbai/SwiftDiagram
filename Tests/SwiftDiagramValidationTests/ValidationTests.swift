@@ -113,4 +113,59 @@ final class ValidationTests: XCTestCase {
 
         XCTAssertTrue(codes.isSuperset(of: ["SWD2007", "SWD2008", "SWD2010", "SWD2015"]))
     }
+
+    func testRejectsOpenAccessOutsideClasses() {
+        let diagram = Diagram(
+            declarations: [
+                TypeDeclaration(
+                    kind: .struct,
+                    name: "Value",
+                    accessLevel: .open,
+                    members: [
+                        .method(
+                            MethodDeclaration(
+                                name: "run",
+                                accessLevel: .open,
+                                sourceLocation: location
+                            )
+                        )
+                    ],
+                    sourceLocation: location
+                )
+            ]
+        )
+
+        let diagnostics = SwiftDiagramValidator().validate(diagram, fileName: "Access.swd")
+
+        XCTAssertEqual(Set(diagnostics.map(\.code.rawValue)), ["SWD2016", "SWD2017"])
+        XCTAssertTrue(diagnostics.allSatisfy { $0.range == location })
+    }
+
+    func testMethodOverloadsUseStructuredParameterSignatures() {
+        let stringMethod = Member.method(
+            MethodDeclaration(
+                name: "load",
+                parameters: [Parameter(externalName: "id", type: .named("String", genericArguments: []))]
+            )
+        )
+        let intMethod = Member.method(
+            MethodDeclaration(
+                name: "load",
+                parameters: [Parameter(externalName: "id", type: .named("Int", genericArguments: []))]
+            )
+        )
+        let diagram = Diagram(
+            declarations: [
+                TypeDeclaration(
+                    kind: .struct,
+                    name: "Loader",
+                    members: [stringMethod, intMethod, stringMethod]
+                )
+            ]
+        )
+
+        let diagnostics = SwiftDiagramValidator().validate(diagram)
+
+        XCTAssertEqual(diagnostics.map(\.code.rawValue), ["SWD2002"])
+    }
 }

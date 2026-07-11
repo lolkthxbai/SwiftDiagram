@@ -1,17 +1,18 @@
 # CLI
 
-Milestone 1 provides `render` and `validate`. Both commands read local files, perform no network access, and print diagnostics to standard error.
+The CLI provides offline `render` and `validate` commands. Both commands read local files, perform no network access, and print diagnostics to standard error.
 
 ## Render
 
 ```bash
 swiftdiagram render Architecture.swd
 swiftdiagram render Architecture.swd --format mermaid
+swiftdiagram render Architecture.swd --format plantuml --output Architecture.puml
 swiftdiagram render Architecture.swd --output Architecture.mmd
 swiftdiagram render Architecture.swd --stdout
 ```
 
-Mermaid is the only Milestone 1 format and is the default. Without `--output`, rendered text is written to standard output. `--stdout` and `--output` are mutually exclusive. Rendering is suppressed when parsing or validation produces an error.
+Mermaid is the default format. PlantUML is selected with `--format plantuml` and produces textual `.puml` source without requiring Java, a browser, or a remote server. Without `--output`, rendered text is written to standard output. `--stdout` and `--output` are mutually exclusive. Rendering is suppressed when parsing or validation produces an error.
 
 ## Validate
 
@@ -27,4 +28,4 @@ Valid input exits successfully without output. Notes and errors are printed to s
 - `1`: source diagnostics contain an error.
 - `64`: command arguments or file I/O are invalid.
 
-Configuration discovery, `--force`, PlantUML, inspection, formatting, and JSON commands are planned for later milestones.
+Configuration discovery, `--force`, inspection, formatting, and JSON commands are planned for later milestones.

@@ -147,6 +147,7 @@ private func lowerDeclaration(_ syntax: TypeDeclarationSyntax) -> TypeDeclaratio
     TypeDeclaration(
         kind: TypeKind(syntax.kind),
         name: QualifiedName(syntax.name.name),
+        accessLevel: syntax.accessLevel.map(AccessLevel.init),
         members: syntax.members.map(lowerMember),
         sourceLocation: SourceRange(syntax.range)
     )
@@ -160,18 +161,52 @@ private func lowerMember(_ syntax: MemberSyntax) -> Member {
                 name: property.name,
                 type: lowerType(property.type),
                 mutability: property.mutability == .letProperty ? .constant : .variable,
+                accessLevel: property.accessLevel.map(AccessLevel.init),
                 accessor: property.accessor.map(PropertyAccessor.init),
                 sourceLocation: SourceRange(property.range)
+            )
+        )
+    case .method(let method):
+        return .method(
+            MethodDeclaration(
+                name: method.name,
+                parameters: method.parameters.map(lowerParameter),
+                returnType: method.returnType.map(lowerType),
+                accessLevel: method.accessLevel.map(AccessLevel.init),
+                isAsync: method.isAsync,
+                throwsKind: ThrowsKind(method.throwsKind),
+                sourceLocation: SourceRange(method.range)
             )
         )
     case .enumCase(let enumCase):
         return .enumCase(
             EnumCaseDeclaration(
                 name: enumCase.name,
+                associatedValues: enumCase.associatedValues.map(lowerParameter),
                 sourceLocation: SourceRange(enumCase.range)
             )
         )
+    case .initializer(let initializer):
+        return .initializer(
+            InitializerDeclaration(
+                parameters: initializer.parameters.map(lowerParameter),
+                accessLevel: initializer.accessLevel.map(AccessLevel.init),
+                failableKind: InitializerFailability(initializer.failableKind),
+                isAsync: initializer.isAsync,
+                throwsKind: ThrowsKind(initializer.throwsKind),
+                sourceLocation: SourceRange(initializer.range)
+            )
+        )
     }
+}
+
+private func lowerParameter(_ syntax: ParameterSyntax) -> Parameter {
+    Parameter(
+        externalName: syntax.externalName,
+        localName: syntax.localName,
+        type: lowerType(syntax.type),
+        sourceLocation: SourceRange(syntax.range)
+    )
 }
 
 private func lowerType(_ syntax: TypeReferenceSyntax) -> TypeReference {
@@ -403,12 +438,36 @@ private extension PropertyAccessor {
     }
 }
 
+private extension AccessLevel {
+    init(_ syntax: AccessLevelSyntax) {
+        self = AccessLevel(rawValue: syntax.rawValue)!
+    }
+}
+
+private extension ThrowsKind {
+    init(_ syntax: ThrowsKindSyntax) {
+        self = ThrowsKind(rawValue: syntax.rawValue)!
+    }
+}
+
+private extension InitializerFailability {
+    init(_ syntax: InitializerFailabilitySyntax) {
+        switch syntax {
+        case .none: self = .none
+        case .optional: self = .optional
+        case .implicitlyUnwrapped: self = .implicitlyUnwrapped
+        }
+    }
+}
+
 private extension RelationshipKind {
     init(_ syntax: RelationshipKindSyntax) {
         switch syntax {
         case .inherits: self = .inherits
         case .conforms: self = .conforms
         case .references: self = .references
+        case .accepts: self = .accepts
+        case .returns: self = .returns
         }
     }
 }

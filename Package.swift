@@ -96,6 +96,7 @@ let package = Package(
                 "SwiftDiagramMermaid",
                 "SwiftDiagramModel",
                 "SwiftDiagramParser",
+                "SwiftDiagramPlantUML",
                 "SwiftDiagramRendering",
                 "SwiftDiagramSwiftSyntax",
                 "SwiftDiagramValidation"
@@ -139,7 +140,19 @@ let package = Package(
                 "SwiftDiagramCore",
                 "SwiftDiagramMermaid",
                 "SwiftDiagramParser",
+                "SwiftDiagramRendering",
                 "SwiftDiagramValidation"
+            ]
+        ),
+        .testTarget(
+            name: "SwiftDiagramPlantUMLTests",
+            dependencies: [
+                "SwiftDiagramCore",
+                "SwiftDiagramMermaid",
+                "SwiftDiagramModel",
+                "SwiftDiagramParser",
+                "SwiftDiagramPlantUML",
+                "SwiftDiagramRendering"
             ]
         ),
         .testTarget(

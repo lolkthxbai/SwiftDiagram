@@ -7,9 +7,11 @@ struct LexResult {
 
 struct Lexer {
     private static let keywords: Set<String> = [
-        "any", "case", "class", "conforms", "diagram", "enum", "get", "inherits",
-        "inout", "label", "let", "protocol", "references", "set", "some", "struct",
-        "swiftDiagram", "through", "var"
+        "accepts", "any", "async", "case", "class", "conforms", "diagram", "enum",
+        "fileprivate", "func", "get", "inherits", "init", "inout", "internal", "label",
+        "let", "open", "package", "private", "protocol", "public", "references",
+        "rethrows", "returns", "set", "some", "struct", "swiftDiagram", "through",
+        "throws", "var"
     ]
 
     private let characters: [Character]
@@ -110,7 +112,7 @@ struct Lexer {
             )
         }
 
-        if "{}:,().[]?<>-@".contains(character) {
+        if "{}:,().[]?<>-@!".contains(character) {
             advance()
             return Token(
                 kind: .punctuation(String(character)),

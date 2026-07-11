@@ -74,18 +74,23 @@ private func renderDeclaration(
 ) -> [String] {
     var lines = ["    class \(names[declaration.name]) {"]
     lines.append("        <<\(declaration.kind.rawValue)>>")
+    if let accessLevel = declaration.accessLevel {
+        lines.append("        <<\(accessLevel.rawValue)>>")
+    }
 
     for member in declaration.members {
         guard shouldRender(member, options: options) else { continue }
         switch member {
         case .property(let property):
-            lines.append("        \(renderType(property.type)) \(mermaidText(property.name))")
+            lines.append(
+                "        \(accessSymbol(property.accessLevel))\(renderType(property.type)) \(mermaidText(property.name))"
+            )
         case .enumCase(let enumCase):
-            lines.append("        \(mermaidText(enumCase.name))")
+            lines.append("        \(renderEnumCase(enumCase))")
         case .method(let method) where options.includeMethods:
-            lines.append("        \(mermaidText(method.name))()")
-        case .initializer where options.includeMethods:
-            lines.append("        init()")
+            lines.append("        \(renderMethod(method))")
+        case .initializer(let initializer) where options.includeMethods:
+            lines.append("        \(renderInitializer(initializer))")
         case .typeAlias(let typeAlias):
             lines.append("        \(renderType(typeAlias.assignedType)) \(mermaidText(typeAlias.name))")
         default:
@@ -128,11 +133,76 @@ private func renderRelationship(_ relationship: Relationship, names: MermaidName
     case .accepts, .returns: connector = "..>"
     }
 
-    let label = relationship.label ?? relationship.throughMember
+    let defaultLabel: String?
+    switch relationship.kind {
+    case .accepts: defaultLabel = "accepts"
+    case .returns: defaultLabel = "returns"
+    default: defaultLabel = nil
+    }
+    let label = relationship.label ?? relationship.throughMember ?? defaultLabel
     if let label, !label.isEmpty {
         return "    \(source) \(connector) \(target) : \(mermaidText(label))"
     }
     return "    \(source) \(connector) \(target)"
+}
+
+private func renderEnumCase(_ enumCase: EnumCaseDeclaration) -> String {
+    let name = mermaidText(enumCase.name)
+    guard !enumCase.associatedValues.isEmpty else { return name }
+    return "\(name)(\(enumCase.associatedValues.map(renderParameter).joined(separator: ", ")))"
+}
+
+private func renderMethod(_ method: MethodDeclaration) -> String {
+    var result = "\(accessSymbol(method.accessLevel))\(mermaidText(method.name))"
+    result += "(\(method.parameters.map(renderParameter).joined(separator: ", ")))"
+    if method.isAsync {
+        result += " async"
+    }
+    if method.throwsKind != .none {
+        result += " \(method.throwsKind.rawValue)"
+    }
+    if let returnType = method.returnType {
+        result += " \(renderType(returnType))"
+    }
+    if method.isStatic {
+        result += "$"
+    }
+    return result
+}
+
+private func renderInitializer(_ initializer: InitializerDeclaration) -> String {
+    var result = "\(accessSymbol(initializer.accessLevel))init\(failabilitySuffix(initializer.failableKind))"
+    result += "(\(initializer.parameters.map(renderParameter).joined(separator: ", ")))"
+    if initializer.isAsync {
+        result += " async"
+    }
+    if initializer.throwsKind != .none {
+        result += " \(initializer.throwsKind.rawValue)"
+    }
+    return result
+}
+
+private func renderParameter(_ parameter: Parameter) -> String {
+    let names = [parameter.externalName, parameter.localName].compactMap { $0 }
+    let prefix = names.isEmpty ? "" : "\(names.map(mermaidText).joined(separator: " ")): "
+    return "\(prefix)\(renderType(parameter.type))"
+}
+
+private func accessSymbol(_ accessLevel: AccessLevel?) -> String {
+    switch accessLevel {
+    case .public, .open: "+"
+    case .private, .fileprivate: "-"
+    case .internal, .package: "~"
+    case nil: ""
+    }
+}
+
+private func failabilitySuffix(_ kind: InitializerFailability) -> String {
+    switch kind {
+    case .none: ""
+    case .optional: "?"
+    case .implicitlyUnwrapped: "!"
+    }
 }
 
 private func renderType(_ type: TypeReference) -> String {

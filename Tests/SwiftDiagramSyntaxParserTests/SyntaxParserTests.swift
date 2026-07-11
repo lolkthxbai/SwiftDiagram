@@ -91,4 +91,22 @@ final class SyntaxParserTests: XCTestCase {
         XCTAssertEqual(keyName, "String")
         XCTAssertEqual(valueName, "Employee")
     }
+
+    func testRecoversFromMalformedMethodAtNextMember() {
+        let source = """
+        struct Broken {
+            func load(id UUID)
+            var recovered: String
+        }
+        """
+
+        let result = DiagramSyntaxParser().parseSyntax(source: source, fileName: "Broken.swd")
+
+        XCTAssertTrue(result.diagnostics.contains { $0.code == "SWD1031" })
+        guard case .declaration(let declaration) = result.sourceFile.statements.first,
+              case .property(let property) = declaration.members.first else {
+            return XCTFail("Expected parser recovery at the property")
+        }
+        XCTAssertEqual(property.name, "recovered")
+    }
 }

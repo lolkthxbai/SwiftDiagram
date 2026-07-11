@@ -14,13 +14,13 @@ struct SwiftDiagramCommand: ParsableCommand {
 struct RenderCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "render",
-        abstract: "Render a SwiftDiagram file as Mermaid."
+        abstract: "Render a SwiftDiagram file as Mermaid or PlantUML."
     )
 
     @Argument(help: "Path to the .swd input file.")
     var input: String
 
-    @Option(name: .long, help: "Output format. Milestone 1 supports mermaid.")
+    @Option(name: .long, help: "Output format: mermaid or plantuml.")
     var format: RenderFormat = .mermaid
 
     @Option(name: [.short, .long], help: "Write output to this file.")
@@ -80,9 +80,13 @@ struct ValidateCommand: ParsableCommand {
 
 enum RenderFormat: String, ExpressibleByArgument {
     case mermaid
+    case plantuml
 
     var outputFormat: OutputFormat {
-        .mermaid
+        switch self {
+        case .mermaid: .mermaid
+        case .plantuml: .plantuml
+        }
     }
 }
 

@@ -26,6 +26,16 @@ final class CLITests: XCTestCase {
         XCTAssertEqual(fileRendering.status, 0, fileRendering.stderr)
         XCTAssertTrue(fileRendering.stdout.isEmpty)
         XCTAssertTrue(try String(contentsOf: output, encoding: .utf8).hasPrefix("classDiagram\n"))
+
+        let plantOutput = temporaryDirectory.appendingPathComponent("Valid.puml")
+        let plantRendering = try runCLI([
+            "render", validInput.path, "--format", "plantuml", "--output", plantOutput.path
+        ])
+        XCTAssertEqual(plantRendering.status, 0, plantRendering.stderr)
+        XCTAssertTrue(plantRendering.stdout.isEmpty)
+        let plantText = try String(contentsOf: plantOutput, encoding: .utf8)
+        XCTAssertTrue(plantText.hasPrefix("@startuml\n"))
+        XCTAssertTrue(plantText.hasSuffix("@enduml\n"))
     }
 
     func testInvalidInputReturnsFailureAndLocatedDiagnostic() throws {
