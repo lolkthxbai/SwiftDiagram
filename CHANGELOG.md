@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-07-11
+
+- Pinned GitHub Actions to macOS 26 so CI and release checks use the required Swift 6.3 toolchain.
+
 ## 0.3.0 - 2026-07-10
 
 - Added access-controlled methods, initializers, enum associated values, and `accepts` and `returns` relationships.
