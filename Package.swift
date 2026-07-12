@@ -107,6 +107,7 @@ let package = Package(
             name: "swiftdiagram",
             dependencies: [
                 "SwiftDiagramCore",
+                "SwiftDiagramModel",
                 "SwiftDiagramRendering",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]

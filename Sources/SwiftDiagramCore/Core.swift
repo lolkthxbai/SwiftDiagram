@@ -12,6 +12,16 @@ public enum OutputFormat: String, Equatable, Sendable, Codable {
     case plantuml
 }
 
+public struct DiagramSource: Equatable, Sendable {
+    public var path: String
+    public var contents: String
+
+    public init(path: String, contents: String) {
+        self.path = path
+        self.contents = contents
+    }
+}
+
 public struct CompilationResult: Equatable, Sendable {
     public var diagram: Diagram?
     public var diagnostics: [Diagnostic]
@@ -86,6 +96,39 @@ public struct SwiftDiagramService: Sendable {
         )
     }
 
+    public func parseAndValidate(sources: [DiagramSource]) -> CompilationResult {
+        let sources = sources.sorted { $0.path < $1.path }
+        var metadata: DiagramMetadata?
+        var declarations: [TypeDeclaration] = []
+        var extensions: [ExtensionDeclaration] = []
+        var relationships: [Relationship] = []
+        var diagnostics: [Diagnostic] = []
+
+        for source in sources {
+            let parseResult = parser.parse(source: source.contents, fileName: source.path)
+            diagnostics.append(contentsOf: parseResult.diagnostics)
+            guard let diagram = parseResult.diagram else { continue }
+            if metadata == nil {
+                metadata = diagram.metadata
+            }
+            declarations.append(contentsOf: diagram.declarations)
+            extensions.append(contentsOf: diagram.extensions)
+            relationships.append(contentsOf: diagram.relationships)
+        }
+
+        let diagram = Diagram(
+            metadata: metadata ?? DiagramMetadata(),
+            declarations: declarations,
+            extensions: extensions,
+            relationships: relationships
+        )
+        diagnostics.append(contentsOf: validator.validate(diagram))
+        return CompilationResult(
+            diagram: diagram,
+            diagnostics: sortedDiagnostics(diagnostics)
+        )
+    }
+
     public func render(
         source: String,
         fileName: String? = nil,
@@ -93,6 +136,22 @@ public struct SwiftDiagramService: Sendable {
         options: RenderOptions = RenderOptions()
     ) -> RenderingResult {
         let compilation = parseAndValidate(source: source, fileName: fileName)
+        return render(compilation, format: format, options: options)
+    }
+
+    public func render(
+        sources: [DiagramSource],
+        format: OutputFormat = .mermaid,
+        options: RenderOptions = RenderOptions()
+    ) -> RenderingResult {
+        render(parseAndValidate(sources: sources), format: format, options: options)
+    }
+
+    private func render(
+        _ compilation: CompilationResult,
+        format: OutputFormat,
+        options: RenderOptions
+    ) -> RenderingResult {
         guard !compilation.hasErrors, let diagram = compilation.diagram else {
             return RenderingResult(output: nil, diagnostics: compilation.diagnostics)
         }
@@ -148,6 +207,11 @@ public enum DiagnosticFormatter {
 
 private func sortedDiagnostics(_ diagnostics: [Diagnostic]) -> [Diagnostic] {
     diagnostics.sorted {
+        let lhsFile = $0.fileName ?? ""
+        let rhsFile = $1.fileName ?? ""
+        if lhsFile != rhsFile {
+            return lhsFile < rhsFile
+        }
         let lhsOffset = $0.range?.start.offset ?? Int.max
         let rhsOffset = $1.range?.start.offset ?? Int.max
         if lhsOffset != rhsOffset {

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-07-12
+
+- Added deterministic recursive loading for multiple `.swd` files and directories with repeatable include and exclude globs.
+- Added CLI filters for declaration access, member access, methods, inferred relationships, elements, and relationship targets.
+- Added wildcard-aware, non-mutating renderer filtering and multi-directory golden fixtures with shuffled-input determinism coverage.
+
 ## 0.4.0 - 2026-07-11
 
 - Added extensions, attributes, static and mutating methods, computed property signatures, and explicit `owns`, `contains`, and `extends` relationships.

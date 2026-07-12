@@ -1,3 +1,4 @@
+import Foundation
 import SwiftDiagramModel
 
 public protocol DiagramRenderer: Sendable {
@@ -60,4 +61,48 @@ public enum DiagramOrientation: String, Equatable, Sendable, Codable {
     case bottomToTop
     case leftToRight
     case rightToLeft
+}
+
+public enum GlobPatternMatcher {
+    public static func matches(_ value: String, pattern: String) -> Bool {
+        let normalizedValue = value.replacingOccurrences(of: "\\", with: "/")
+        let normalizedPattern = pattern.replacingOccurrences(of: "\\", with: "/")
+        return normalizedValue.range(
+            of: regularExpression(for: normalizedPattern),
+            options: .regularExpression
+        ) != nil
+    }
+
+    public static func matchesAny(_ value: String, patterns: [String]) -> Bool {
+        patterns.contains { matches(value, pattern: $0) }
+    }
+
+    private static func regularExpression(for pattern: String) -> String {
+        let characters = Array(pattern)
+        var result = "^"
+        var index = 0
+
+        while index < characters.count {
+            let character = characters[index]
+            if character == "*" {
+                if index + 1 < characters.count, characters[index + 1] == "*" {
+                    index += 2
+                    if index < characters.count, characters[index] == "/" {
+                        result += "(?:.*/)?"
+                        index += 1
+                    } else {
+                        result += ".*"
+                    }
+                    continue
+                }
+                result += "[^/]*"
+            } else if character == "?" {
+                result += "[^/]"
+            } else {
+                result += NSRegularExpression.escapedPattern(for: String(character))
+            }
+            index += 1
+        }
+        return result + "$"
+    }
 }

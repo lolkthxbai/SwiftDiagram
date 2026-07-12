@@ -12,18 +12,31 @@ public struct PlantUMLRenderer: DiagramRenderer, Sendable {
         options: RenderOptions = RenderOptions()
     ) throws -> String {
         let presentation = extensionPresentation(diagram, options: options)
+        let localDeclarationNames = Set(presentation.declarations.map(\.name))
         let declarations = filteredDeclarations(presentation.declarations, options: options)
-        let relationships = filteredRelationships(diagram.relationships + presentation.relationships, options: options)
+        let visibleDeclarationNames = Set(declarations.map(\.name))
+        let separateExtensions = filteredExtensions(
+            presentation.separate,
+            localDeclarationNames: localDeclarationNames,
+            visibleDeclarationNames: visibleDeclarationNames,
+            options: options
+        )
+        let relationships = filteredRelationships(
+            diagram.relationships + presentation.relationships,
+            localDeclarationNames: localDeclarationNames,
+            visibleDeclarationNames: visibleDeclarationNames,
+            options: options
+        )
         let names = PlantUMLNameTable(
             names: declarations.map(\.name) + relationships.flatMap { [$0.source, $0.target] } +
-                presentation.separate.flatMap { [$0.alias, $0.target] + $0.conformances }
+                separateExtensions.flatMap { [$0.alias, $0.target] + $0.conformances }
         )
         var lines = ["@startuml", "hide empty members"]
 
         for declaration in declarations {
             lines.append(contentsOf: renderDeclaration(declaration, names: names, options: options))
         }
-        for declaration in presentation.separate {
+        for declaration in separateExtensions {
             lines.append(contentsOf: renderExtension(declaration, names: names, options: options))
         }
         for relationship in relationships {
@@ -58,7 +71,7 @@ private func extensionPresentation(_ diagram: Diagram, options: RenderOptions) -
 
     for (index, declaration) in diagram.extensions.enumerated() {
         guard case .named(let target, _) = declaration.extendedType,
-              !options.excludedElements.contains(target.description) else { continue }
+              !GlobPatternMatcher.matchesAny(target.description, patterns: options.excludedElements) else { continue }
         let conformances = declaration.conformances.compactMap(namedType)
         if options.extensionDisplayMode == .merged,
            let declarationIndex = declarations.firstIndex(where: { $0.name == target }) {
@@ -91,7 +104,7 @@ private func filteredDeclarations(
     options: RenderOptions
 ) -> [TypeDeclaration] {
     var result = declarations.filter { declaration in
-        if options.excludedElements.contains(declaration.name.description) {
+        if GlobPatternMatcher.matchesAny(declaration.name.description, patterns: options.excludedElements) {
             return false
         }
         guard let accessLevels = options.declarationAccessLevels else { return true }
@@ -105,19 +118,51 @@ private func filteredDeclarations(
 
 private func filteredRelationships(
     _ relationships: [Relationship],
+    localDeclarationNames: Set<QualifiedName>,
+    visibleDeclarationNames: Set<QualifiedName>,
     options: RenderOptions
 ) -> [Relationship] {
     relationships
-        .filter {
-            (options.includeInferredRelationships || $0.origin != .inferred) &&
-                !options.excludedElements.contains($0.source.description) &&
-                !options.excludedRelationshipTargets.contains($0.target.description)
+        .filter { relationship in
+            (options.includeInferredRelationships || relationship.origin != .inferred) &&
+                visibleDeclarationNames.contains(relationship.source) &&
+                (!localDeclarationNames.contains(relationship.target) || visibleDeclarationNames.contains(relationship.target)) &&
+                !GlobPatternMatcher.matchesAny(relationship.source.description, patterns: options.excludedElements) &&
+                !GlobPatternMatcher.matchesAny(relationship.target.description, patterns: options.excludedElements) &&
+                !GlobPatternMatcher.matchesAny(
+                    relationship.target.description,
+                    patterns: options.excludedRelationshipTargets
+                )
         }
         .sorted {
             let lhs = ($0.source.description, $0.target.description, $0.kind.rawValue, $0.throughMember ?? "")
             let rhs = ($1.source.description, $1.target.description, $1.kind.rawValue, $1.throughMember ?? "")
             return lhs < rhs
         }
+}
+
+private func filteredExtensions(
+    _ extensions: [PresentedExtension],
+    localDeclarationNames: Set<QualifiedName>,
+    visibleDeclarationNames: Set<QualifiedName>,
+    options: RenderOptions
+) -> [PresentedExtension] {
+    extensions.compactMap { declaration in
+        if localDeclarationNames.contains(declaration.target) &&
+            !visibleDeclarationNames.contains(declaration.target) {
+            return nil
+        }
+        var result = declaration
+        result.conformances = result.conformances.filter { conformance in
+            (!localDeclarationNames.contains(conformance) || visibleDeclarationNames.contains(conformance)) &&
+                !GlobPatternMatcher.matchesAny(conformance.description, patterns: options.excludedElements) &&
+                !GlobPatternMatcher.matchesAny(
+                    conformance.description,
+                    patterns: options.excludedRelationshipTargets
+                )
+        }
+        return result
+    }
 }
 
 private func renderDeclaration(
@@ -188,11 +233,10 @@ private func shouldRender(_ member: Member, options: RenderOptions) -> Bool {
     case .typeAlias(let typeAlias): accessLevel = typeAlias.accessLevel
     case .enumCase: accessLevel = nil
     }
-    if !options.includePrivateMembers && (accessLevel == .private || accessLevel == .fileprivate) {
-        return false
+    if let filters = options.memberAccessLevels {
+        return accessLevel.map(filters.contains) ?? filters.contains(.internal)
     }
-    guard let filters = options.memberAccessLevels else { return true }
-    return accessLevel.map(filters.contains) ?? filters.contains(.internal)
+    return options.includePrivateMembers || (accessLevel != .private && accessLevel != .fileprivate)
 }
 
 private func renderMethod(_ method: MethodDeclaration) -> String {

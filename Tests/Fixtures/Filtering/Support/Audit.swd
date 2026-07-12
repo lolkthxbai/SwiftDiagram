@@ -1,0 +1,4 @@
+public struct AuditLog {
+    public let message: String
+    internal let timestamp: Date
+}

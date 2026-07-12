@@ -1,0 +1,18 @@
+public protocol Identifiable {
+    public var id: UUID { get }
+}
+
+public struct User: Identifiable {
+    public let id: UUID
+    internal var cache: String
+    private var token: String
+    public func display() -> String
+}
+
+internal struct Session {
+    public let id: UUID
+}
+
+public struct TemporaryRecord {
+    public let id: UUID
+}

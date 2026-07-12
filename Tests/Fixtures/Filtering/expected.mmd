@@ -1,0 +1,26 @@
+classDiagram
+    class AuditLog {
+        <<struct>>
+        <<public>>
+        +String message
+    }
+    class Identifiable {
+        <<protocol>>
+        <<public>>
+        +UUID id
+    }
+    class Team {
+        <<class>>
+        <<open>>
+        +[User] members
+        +AuditLog audit
+        +refresh()
+    }
+    class User {
+        <<struct>>
+        <<public>>
+        +UUID id
+        +display() String
+    }
+    Team o-- User : members
+    User ..|> Identifiable

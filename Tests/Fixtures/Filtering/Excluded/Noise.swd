@@ -1,0 +1,3 @@
+public struct Noise {
+    public let value: String
+}

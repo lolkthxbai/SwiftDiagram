@@ -1,0 +1,9 @@
+open class Team {
+    public var members: [User]
+    public var audit: AuditLog
+    private var secret: String
+    public func refresh()
+}
+
+Team contains User through members
+Team references AuditLog through audit

@@ -122,6 +122,71 @@ final class PlantUMLTests: XCTestCase {
         }
     }
 
+    func testFilteringDoesNotMutateSemanticModel() throws {
+        let source = """
+        public struct User {
+            public let id: UUID
+            private var token: String
+        }
+        internal struct Session {}
+        User references Session
+        """
+        let parseResult = SwiftDiagramParser().parse(source: source, fileName: "Filters.swd")
+        let diagram = try XCTUnwrap(parseResult.diagram)
+        let original = diagram
+        let options = RenderOptions(
+            declarationAccessLevels: [.public],
+            memberAccessLevels: [.private],
+            excludedElements: ["*Preview"],
+            excludedRelationshipTargets: ["Session"]
+        )
+
+        _ = try MermaidRenderer().render(diagram, options: options)
+        _ = try PlantUMLRenderer().render(diagram, options: options)
+
+        XCTAssertEqual(diagram, original)
+    }
+
+    func testGlobMatcherSupportsSegmentAndRecursiveWildcards() {
+        XCTAssertTrue(GlobPatternMatcher.matches("Domain/Models.swd", pattern: "**/*.swd"))
+        XCTAssertTrue(GlobPatternMatcher.matches("Domain/Models.swd", pattern: "Domain/Model?.swd"))
+        XCTAssertTrue(GlobPatternMatcher.matches("UserPreview", pattern: "*Preview"))
+        XCTAssertFalse(GlobPatternMatcher.matches("Domain/Nested/Models.swd", pattern: "Domain/*.swd"))
+    }
+
+    func testInferredRelationshipFilterOmitsOnlyInferredEdges() throws {
+        let diagram = Diagram(
+            declarations: [
+                TypeDeclaration(kind: .struct, name: "Source"),
+                TypeDeclaration(kind: .struct, name: "ExplicitTarget"),
+                TypeDeclaration(kind: .struct, name: "InferredTarget")
+            ],
+            relationships: [
+                Relationship(
+                    source: "Source",
+                    target: "ExplicitTarget",
+                    kind: .references,
+                    origin: .explicit
+                ),
+                Relationship(
+                    source: "Source",
+                    target: "InferredTarget",
+                    kind: .references,
+                    origin: .inferred
+                )
+            ]
+        )
+        let options = RenderOptions(includeInferredRelationships: false)
+
+        let mermaid = try MermaidRenderer().render(diagram, options: options)
+        let plantUML = try PlantUMLRenderer().render(diagram, options: options)
+
+        XCTAssertTrue(mermaid.contains("Source --> ExplicitTarget"))
+        XCTAssertFalse(mermaid.contains("Source --> InferredTarget"))
+        XCTAssertTrue(plantUML.contains("Source --> ExplicitTarget"))
+        XCTAssertFalse(plantUML.contains("Source --> InferredTarget"))
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

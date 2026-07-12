@@ -53,4 +53,28 @@ final class EndToEndTests: XCTestCase {
             }
         )
     }
+
+    func testMultiSourceInputOrderDoesNotChangeModelOrOutput() {
+        let models = DiagramSource(
+            path: "Domain/Models.swd",
+            contents: "public struct User { public let id: UUID }"
+        )
+        let services = DiagramSource(
+            path: "Services/Team.swd",
+            contents: """
+            public struct Team { public var members: [User] }
+            Team contains User through members
+            """
+        )
+        let service = SwiftDiagramService()
+
+        let forwardCompilation = service.parseAndValidate(sources: [models, services])
+        let reverseCompilation = service.parseAndValidate(sources: [services, models])
+        let forwardOutput = service.render(sources: [models, services]).output
+        let reverseOutput = service.render(sources: [services, models]).output
+
+        XCTAssertFalse(forwardCompilation.hasErrors)
+        XCTAssertEqual(forwardCompilation.diagram, reverseCompilation.diagram)
+        XCTAssertEqual(forwardOutput, reverseOutput)
+    }
 }

@@ -75,6 +75,91 @@ final class CLITests: XCTestCase {
         XCTAssertTrue(finalCheck.stderr.isEmpty)
     }
 
+    func testMultiDirectoryFilteringMatchesGoldenOutputsAndIsDeterministic() throws {
+        let fixture = repositoryRoot.appendingPathComponent("Tests/Fixtures/Filtering", isDirectory: true)
+        let filters = [
+            "--include-file", "Domain/**",
+            "--include-file", "Services/**",
+            "--include-file", "Support/**",
+            "--exclude-file", "**/Preview.swd",
+            "--declaration-access", "public,open",
+            "--member-access", "public",
+            "--exclude-element", "Temp*",
+            "--exclude-relationship-target", "Audit*"
+        ]
+
+        let mermaid = try runCLI(["render", fixture.path, "--format", "mermaid"] + filters)
+        let repeated = try runCLI(["render", fixture.path, "--format", "mermaid"] + filters)
+        let expectedMermaid = try String(
+            contentsOf: fixture.appendingPathComponent("expected.mmd"),
+            encoding: .utf8
+        )
+        XCTAssertEqual(mermaid.status, 0, mermaid.stderr)
+        XCTAssertEqual(mermaid.stdout, expectedMermaid)
+        XCTAssertEqual(repeated.stdout, mermaid.stdout)
+
+        let withoutMethods = try runCLI(
+            ["render", fixture.path, "--format", "mermaid", "--exclude-methods"] + filters
+        )
+        XCTAssertEqual(withoutMethods.status, 0, withoutMethods.stderr)
+        XCTAssertFalse(withoutMethods.stdout.contains("refresh()"))
+        XCTAssertFalse(withoutMethods.stdout.contains("display()"))
+
+        let plantUML = try runCLI(["render", fixture.path, "--format", "plantuml"] + filters)
+        let expectedPlantUML = try String(
+            contentsOf: fixture.appendingPathComponent("expected.puml"),
+            encoding: .utf8
+        )
+        XCTAssertEqual(plantUML.status, 0, plantUML.stderr)
+        XCTAssertEqual(plantUML.stdout, expectedPlantUML)
+
+        let shuffledInputs = [
+            fixture.appendingPathComponent("Services/Team.swd").path,
+            fixture.appendingPathComponent("Support/Audit.swd").path,
+            fixture.appendingPathComponent("Domain/Models.swd").path
+        ]
+        let shuffled = try runCLI(
+            ["render"] + shuffledInputs + [
+                "--declaration-access", "public,open",
+                "--member-access", "public",
+                "--exclude-element", "Temp*",
+                "--exclude-relationship-target", "Audit*"
+            ]
+        )
+        XCTAssertEqual(shuffled.status, 0, shuffled.stderr)
+        XCTAssertEqual(shuffled.stdout, expectedMermaid)
+    }
+
+    func testDeclarationAndMemberAccessFiltersAreIndependent() throws {
+        let fixture = repositoryRoot.appendingPathComponent("Tests/Fixtures/Filtering", isDirectory: true)
+
+        let internalDeclarations = try runCLI([
+            "render", fixture.path,
+            "--include-file", "Domain/**",
+            "--declaration-access", "internal",
+            "--member-access", "public"
+        ])
+        XCTAssertEqual(internalDeclarations.status, 0, internalDeclarations.stderr)
+        XCTAssertTrue(internalDeclarations.stdout.contains("class Session"))
+        XCTAssertTrue(internalDeclarations.stdout.contains("+UUID id"))
+        XCTAssertFalse(internalDeclarations.stdout.contains("class User"))
+        XCTAssertFalse(internalDeclarations.stdout.contains("Team"))
+
+        let privateMembers = try runCLI([
+            "render", fixture.path,
+            "--include-file", "Domain/**",
+            "--include-file", "Services/**",
+            "--include-file", "Support/**",
+            "--exclude-file", "**/Preview.swd",
+            "--declaration-access", "public,open",
+            "--member-access", "private"
+        ])
+        XCTAssertEqual(privateMembers.status, 0, privateMembers.stderr)
+        XCTAssertTrue(privateMembers.stdout.contains("-String token"))
+        XCTAssertTrue(privateMembers.stdout.contains("-String secret"))
+        XCTAssertFalse(privateMembers.stdout.contains("+UUID id"))
+    }
+
     private func runCLI(_ arguments: [String]) throws -> (status: Int32, stdout: String, stderr: String) {
         let process = Process()
         process.executableURL = repositoryRoot.appendingPathComponent(".build/debug/swiftdiagram")

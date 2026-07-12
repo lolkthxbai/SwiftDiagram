@@ -1,0 +1,3 @@
+public struct UserPreview {
+    public let user: User
+}

@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import SwiftDiagramCore
+import SwiftDiagramModel
 import SwiftDiagramRendering
 
 @main
@@ -15,11 +16,11 @@ struct SwiftDiagramCommand: ParsableCommand {
 struct RenderCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "render",
-        abstract: "Render a SwiftDiagram file as Mermaid or PlantUML."
+        abstract: "Render SwiftDiagram files as Mermaid or PlantUML."
     )
 
-    @Argument(help: "Path to the .swd input file.")
-    var input: String
+    @Argument(help: "One or more .swd files or directories.")
+    var inputs: [String]
 
     @Option(name: .long, help: "Output format: mermaid or plantuml.")
     var format: RenderFormat = .mermaid
@@ -29,6 +30,30 @@ struct RenderCommand: ParsableCommand {
 
     @Option(name: .long, help: "Extension display mode: separate, merged, or hidden.")
     var extensions: ExtensionMode = .merged
+
+    @Option(name: .long, help: "Include files matching this root-relative glob. Repeatable.")
+    var includeFile: [String] = []
+
+    @Option(name: .long, help: "Exclude files matching this root-relative glob. Repeatable.")
+    var excludeFile: [String] = []
+
+    @Option(name: .long, help: "Declaration access levels as a comma-separated list.")
+    var declarationAccess: String?
+
+    @Option(name: .long, help: "Member access levels as a comma-separated list.")
+    var memberAccess: String?
+
+    @Option(name: .long, help: "Exclude elements matching this glob. Repeatable.")
+    var excludeElement: [String] = []
+
+    @Option(name: .long, help: "Exclude relationships whose target matches this glob. Repeatable.")
+    var excludeRelationshipTarget: [String] = []
+
+    @Flag(name: .long, help: "Exclude method and initializer signatures.")
+    var excludeMethods = false
+
+    @Flag(name: .long, help: "Exclude inferred relationships.")
+    var excludeInferredRelationships = false
 
     @Flag(name: .long, help: "Write rendered output to standard output.")
     var stdout = false
@@ -40,12 +65,20 @@ struct RenderCommand: ParsableCommand {
     }
 
     func run() throws {
-        let source = try readSource(at: input)
+        let sources: [DiagramSource]
+        do {
+            sources = try loadDiagramSources(
+                inputs: inputs,
+                includePatterns: includeFile,
+                excludePatterns: excludeFile
+            )
+        } catch {
+            throw ValidationError(error.localizedDescription)
+        }
         let result = SwiftDiagramService().render(
-            source: source,
-            fileName: input,
+            sources: sources,
             format: format.outputFormat,
-            options: RenderOptions(extensionDisplayMode: extensions.displayMode)
+            options: try renderOptions()
         )
         writeDiagnostics(DiagnosticFormatter.format(result.diagnostics))
         guard !result.hasErrors, let rendered = result.output else {
@@ -61,6 +94,21 @@ struct RenderCommand: ParsableCommand {
         } else {
             print(rendered, terminator: "")
         }
+    }
+
+    private func renderOptions() throws -> RenderOptions {
+        RenderOptions(
+            declarationAccessLevels: try parseAccessLevels(
+                declarationAccess,
+                option: "--declaration-access"
+            ),
+            memberAccessLevels: try parseAccessLevels(memberAccess, option: "--member-access"),
+            includeMethods: !excludeMethods,
+            includeInferredRelationships: !excludeInferredRelationships,
+            extensionDisplayMode: extensions.displayMode,
+            excludedElements: excludeElement,
+            excludedRelationshipTargets: excludeRelationshipTarget
+        )
     }
 }
 
@@ -157,6 +205,25 @@ private func readSource(at path: String) throws -> String {
     } catch {
         throw ValidationError("unable to read '\(path)': \(error.localizedDescription)")
     }
+}
+
+private func parseAccessLevels(_ value: String?, option: String) throws -> [AccessLevel]? {
+    guard let value else { return nil }
+    let components = value.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+    guard !components.isEmpty, components.allSatisfy({ !$0.isEmpty }) else {
+        throw ValidationError("\(option) requires a comma-separated access-level list")
+    }
+
+    var result: [AccessLevel] = []
+    for component in components {
+        guard let accessLevel = AccessLevel(rawValue: component) else {
+            throw ValidationError("invalid access level '\(component)' for \(option)")
+        }
+        if !result.contains(accessLevel) {
+            result.append(accessLevel)
+        }
+    }
+    return result
 }
 
 private func writeDiagnostics(_ text: String) {
